@@ -1,0 +1,88 @@
+{
+  "knowledge_base": {
+    "company_name": "Observe Insurance",
+    "support_email": "support@observeinsurance.com",
+    "faqs": [
+      {
+        "category": "General Information",
+        "intent": "office_hours",
+        "questions": [
+          "What are your office hours?",
+          "When are you open?",
+          "What time do you close?"
+        ],
+        "answer": "Our customer support team is available Monday through Friday, from 8:00 AM to 6:00 PM Eastern Time."
+      },
+      {
+        "category": "General Information",
+        "intent": "mailing_address",
+        "questions": [
+          "What is your mailing address?",
+          "Where can I mail my documents?",
+          "Where are you located?"
+        ],
+        "answer": "Our mailing address is Observe Insurance, 123 Claim Way, Suite 400, San Francisco, California 94105."
+      },
+      {
+        "category": "Claims Process",
+        "intent": "start_new_claim",
+        "questions": [
+          "How do I start a new claim?",
+          "I need to file a claim.",
+          "Where do I report an incident?"
+        ],
+        "answer": "To start a new claim, you can log into your customer portal on our website at observeinsurance.com, or I can schedule a callback from our claims initiation team to help you set that up."
+      },
+      {
+        "category": "Claims Process",
+        "intent": "general_claims_process",
+        "questions": [
+          "How does the claims process work?",
+          "What happens after I file a claim?",
+          "How long does a claim take?"
+        ],
+        "answer": "Once a claim is filed, it is assigned to an adjuster who reviews the details. They may request additional documentation from you. After a thorough review, your claim status will be updated to approved, pending, or requires documentation."
+      },
+      {
+        "category": "Claims Process",
+        "intent": "submit_documentation",
+        "questions": [
+          "How do I send my documents?",
+          "Where do I upload photos?",
+          "Where do I email my paperwork?"
+        ],
+        "answer": "You can securely upload your required documents directly to your online portal, or you can email them to us at support@observeinsurance.com. Please make sure to include your claim number in the subject line if you email them."
+      },
+      {
+        "category": "Escalation and Safety",
+        "intent": "human_representative",
+        "questions": [
+          "Can I speak to a human?",
+          "I want to talk to a real person.",
+          "Transfer me to a representative."
+        ],
+        "answer": "I completely understand. I can schedule a callback from one of our human representatives, or I can transfer you to the next available agent. Which would you prefer?"
+      },
+      {
+        "category": "Escalation and Safety",
+        "intent": "emergency_911",
+        "questions": [
+          "I am in an accident right now.",
+          "This is an emergency.",
+          "I need an ambulance."
+        ],
+        "answer": "If you are experiencing a medical emergency or are in immediate danger, please hang up and dial 911 immediately. We can handle your insurance claim once you are safe."
+      },
+      {
+        "category": "Escalation and Safety",
+        "intent": "out_of_scope",
+        "questions": [
+          "What is the weather like?",
+          "Can you order me a pizza?",
+          "Who won the game last night?"
+        ],
+        "answer": "I'm an AI assistant for Observe Insurance, so I can only help you with checking your claim status or answering basic insurance questions. Is there anything related to your insurance I can assist you with?"
+      }
+    ]
+  }
+}

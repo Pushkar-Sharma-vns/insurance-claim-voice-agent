@@ -125,6 +125,98 @@ result instead of a 500. Lookup is fully server-side — VAPI POSTs the tool
 webhook, our server queries Airtable and returns the result string; VAPI never
 touches Airtable.
 
+## Phase 2 · S2 (CRM/Memory) + S3 (Logging/Tracing) — deep-planned
+
+`progress-phase2.json` is the source of truth; this is the narrative. S1, S2, S3
+are now deep-planned and ready to build V1 (they hook into the S1 orchestration
+loop, which is built first). S4 still has only V1/V2 scope.
+
+**One SQLite DB does S2 + S3 + S4** (`data/conversations.db`, stdlib `sqlite3`,
+no new dep, WAL, per-op connection — the same open/write/close idiom as the
+per-call log handler). Chosen over JSONL/Airtable for queryability: cross-call
+memory reads, and S4 metrics become SQL instead of a log-parser.
+
+- **Store division.** Airtable *Interactions* stays the CRM-visible business
+  record (name, summary, sentiment, timestamp), reused verbatim. SQLite is the
+  engineering substrate: transcript + per-turn trace + memory. Both written at
+  call end; `turns` written per turn during the call.
+- **Three tables.** `calls` (one row/call: identity, claim_id, summary+sentiment
+  from S4, `vapi_transcript`, timing, `escalated`), `messages` (structured
+  history — what the model processed, incl. tool calls), `turns` (S3 trace).
+- **Transcript, belt-and-suspenders.** `vapi_transcript` string (authoritative
+  spoken record from the end-of-call-report) *and* structured `messages` rows.
+
+**S2 — cross-call memory is V1** (headline demo pulled forward). At call start,
+`recent_calls_by_phone(digits)` builds a memory block injected into the S1.2
+dynamic context. It's **two-tier and gated**, mirroring the identity gate:
+recognition (name + prior-call count + last-call date) pre-verification; recall
+(prior summaries) only after `identity_verified=true`; **claim_status never**
+enters memory. Same renderer-as-gate that withholds claim data — a phone-spoofed
+caller can't hear prior claim details. Persist path extends the reused
+`/webhooks/vapi/end-of-call`.
+
+**S3 — two channels.** Human-readable INFO lines to the reused
+`log/<callId>.log` (Phase 1 `PerCallFileHandler` + `call_id_var` + masked
+phones, unchanged); machine-readable per-turn trace to the SQLite `turns` table.
+Trace row is written *after* the SSE stream closes, so it's off the
+user-perceived latency path.
+
+- **Metrics locked (V1).** Per turn: turn/LLM latency, prompt/completion/total
+  tokens, tool calls `[{name,status,latency}]`, phase before→after,
+  current_intent, identity_verified, error_type. Per call (derivable):
+  num_turns, total tokens, duration, `escalated` (containment), final_phase,
+  sentiment.
+- **Tokens.** LiteLLM `usage`. resolve-then-stream gives tool-resolution usage
+  for free; the final stream uses `stream_options={"include_usage":True}`;
+  `litellm.token_counter` is the fallback. *Build-verify* Gemini actually
+  returns usage on the final chunk. ([LiteLLM usage](https://docs.litellm.ai/docs/completion/usage))
+- **No tracing library** in V1 — stdlib `time.perf_counter` + a small span
+  helper. OpenTelemetry/dashboards/cost/percentiles are V2.
+
+Still to build-verify (unchanged from handoff): VAPI end-of-call transcript
+field path; that in-memory state is still resident (same worker) at webhook time.
+
+## Phase 2 · S4 (Post-processing + Metrics/ROI) — deep-planned
+
+**Post-processing is ours, synchronous, in the webhook** (P2-D3). Instead of
+VAPI's `analysisPlan`, the extended `/webhooks/vapi/end-of-call` makes one
+LiteLLM Gemini call and gets `{summary, sentiment, resolution_status,
+primary_topic}` back on a **flat** structured-output schema (`response_format`
+json_schema + `enable_json_schema_validation`; flat because nested Pydantic can
+400 on Gemini; prompt-and-parse fallback → S1.6 `llm_error` tier). This also
+*removes* the Phase 1 async-analysis timing problem — we own the call, so no
+`GET /call/{id}` polling. `summary`+`sentiment` → Airtable `write_interaction`
+(reused); all four → SQLite `calls` row.
+
+- **Same webhook, two phases.** Branch on whether in-memory state exists for
+  `call.id`: present → Phase 2 → our post-processing; absent → Phase 1 → keep the
+  existing VAPI-analysis path. Fallback demo stays untouched.
+- **Containment is code-derived, not the LLM.** `escalated` on the calls row
+  (final_phase `escalating` or an S1.6 repeat-tier hit) drives containment. The
+  LLM's `resolution_status` is descriptive only — never trust the model for the
+  headline metric.
+
+**Metrics compute pulled into V1** (P2-D7). `app/metrics.py` = pure `sqlite3`
+SQL aggregates over the shared DB, no pandas: containment rate, avg handle time,
+avg turns, total tokens + est. cost, sentiment/resolution distributions, tool
+success rate, avg turn/LLM latency. Prints a report; `python -m app.metrics`.
+Cheap because S2/S3 already populate `calls` + `turns`.
+
+**ROI writeup** = `METRICS.md` for the panel: metric→ROI mapping (containment →
+deflected calls → agent-hours saved; token cost → per-call margin; latency →
+throughput) plus the **prompt-tuning feedback loop** — `primary_topic`×escalated
+finds topics to fix in the FAQ/prompt; slow tool latency → S1.4 V2 streaming
+work; negative-sentiment transcripts → tone fixes. Skeleton now, numbers after
+live calls.
+
+Build-verify at build: gemini-2.5-flash json_schema returns valid output (flat
+schema); current gemini-2.5-flash token price for the cost metric (don't
+hardcode from memory).
+
+> **Phase 2 planning is complete — all four sections (S1–S4) are deep-planned
+> and ready to build V1.** Build order: S1 orchestration loop → S2 SQLite store
+> → S3 turn trace → S4 post-processing + metrics. No Phase 2 code written yet.
+
 ## VAPI credentials — which is which
 
 - **Webhook auth (VAPI→us):** our own `VAPI_SECRET`, set as `server.secret` in VAPI,
