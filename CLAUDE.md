@@ -14,6 +14,15 @@ Before implementing:
 - If a simpler approach exists, say so. Push back when warranted.
 - If something is unclear, stop. Name what's confusing. Ask.
 
+### Evidence Over Assumption (STRICT — no exceptions)
+
+**Never assume. Resolve every uncertainty in this order and do not skip a step:**
+1. **Look for evidence in the repo** — read the actual code, config, docs, and prior progress notes. Cite what you found (`file:line`).
+2. **If the repo can't answer it, web-search** — API contracts, SDK behavior, model names/pricing, framework specifics. Verify against official/primary sources, not memory.
+3. **If evidence is still inconclusive, ASK the user** — present the options and the tradeoffs; do not pick silently.
+
+This applies especially to: external API/SDK behavior (VAPI, Airtable, LLM providers), model IDs and capabilities, and anything where a wrong guess costs a rebuild. A plausible-sounding guess stated as fact is a failure even if it turns out right.
+
 ## 2. Simplicity First
 
 **Minimum code that solves the problem. Nothing speculative.**

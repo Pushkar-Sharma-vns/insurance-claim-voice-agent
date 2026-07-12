@@ -1,6 +1,6 @@
 {
   "project": "Observe Insurance – Voice AI Claims Support Agent",
-  "last_updated_turn": 3,
+  "last_updated_turn": 11,
   "current_phase": "Phase 1 – VAPI-native (backend code-complete, awaiting live config)",
   "strategy": "Build BOTH VAPI paths. Phase 1 = VAPI-native (reliable demo). Phase 2 = Custom LLM (technical showcase). Shared backend so no wasted work.",
   "stack": {
@@ -38,7 +38,11 @@
     "Verified: unit test (phone normalize) passes; app imports; TestClient confirms 401 auth, tool results shape, end-of-call type-gating",
     "Wrote SETUP.md (Airtable schema, VAPI assistant config, tool JSON, analysis plan, system prompt)",
     "Added stdlib logging across auth/tools/webhooks/crm with PII-masked phone (***last4); verified log output; covers the graded monitoring/logging deliverable",
-    "Clarified VAPI creds: our webhook uses an invented VAPI_SECRET (X-Vapi-Secret); private key is Phase 2 API auth; public key/assistant_id/phone number live in dashboard. Added vapi_private_key to config/.env"
+    "Clarified VAPI creds: our webhook uses an invented VAPI_SECRET (X-Vapi-Secret); private key is Phase 2 API auth; public key/assistant_id/phone number live in dashboard. Added vapi_private_key to config/.env",
+    "Stripped version pins from requirements.txt (to re-pin after clean install)",
+    "Added per-call file logging (app/logging_setup.py): contextvar holds call id, PerCallFileHandler routes every module's log line to log/<callId>.log; console kept. Verified two concurrent calls write separate files with correct grouping (tool+webhook+crm)",
+    "Added call tracing: tools.py logs tool name + phone source (tool-arg/caller-id) + found; crm.py logs matched name or no-match with scanned candidate list (all masked ***last4). tools.py now catches Airtable errors -> graceful 'unavailable' result to VAPI instead of 500. Verified match + no-match traces against live Airtable",
+    "Diagnostic confirmed live Airtable works (HTTP 200, 4 seeded records incl. Pushkar Sharma +91 9608869815); earlier 'lookup failed' was pre-.env or a no-match, not Airtable auth. Lookup is server-side: VAPI POSTs /tools/lookup-claim, our server queries Airtable, returns result string; VAPI never touches Airtable"
   ],
   "current_step": "Phase 1 backend done + verified in code. Next: user runs live VAPI config + test call.",
   "next_steps": [
@@ -48,8 +52,9 @@
     "THEN Phase 2: custom LLM /chat/completions (SSE) with Gemini 2.5 Flash, reuse crm + webhook"
   ],
   "notes": [
-    "Env is Python 3.9.6 -> used `from __future__ import annotations` for X|None syntax",
-    "requirements.txt has speculative mcp/anthropic/websockets; mcp>=1.1.0 won't install on 3.9. Phase 1 needs only fastapi/uvicorn/pydantic-settings/requests (+httpx for tests)",
-    "Skipped: transferCall tool wiring (add during VAPI config), Phase 2 entirely"
+    "Env upgraded to Python 3.12.13 (Homebrew python3.12); venv recreated, requirements.txt installs clean (incl. mcp/anthropic/websockets). SETUP.md pins `python3.12 -m venv`. `from __future__ import annotations` no longer required but harmless",
+    "Phase 1 runtime needs only fastapi/uvicorn/pydantic-settings/requests (+httpx for tests); rest are Phase 2 / speculative",
+    "Skipped: transferCall tool wiring (add during VAPI config), Phase 2 entirely",
+    "SETUP.md gotchas fixed: use --port 8000 (port 80 needs root -> Errno 13); ngrok not preinstalled -> added `brew install ngrok` + `ngrok config add-authtoken` steps"
   ]
 }

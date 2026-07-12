@@ -94,9 +94,10 @@ type-gating on end-of-call. Locked stack: Gemini 2.5 Flash (Phase 2), ngrok dev.
 **Next (user actions):** create/seed Airtable, fill `.env`, run uvicorn + ngrok,
 configure the VAPI assistant per `SETUP.md`, place a live test call. Then Phase 2.
 
-Env note: Python 3.9.6 locally → used `from __future__ import annotations`.
-`requirements.txt` carries speculative deps (mcp/anthropic/websockets); Phase 1
-only needs fastapi/uvicorn/pydantic-settings/requests.
+Env note: upgraded to **Python 3.12.13** (Homebrew `python3.12`); venv recreated,
+`requirements.txt` now installs clean (incl. mcp/anthropic/websockets). `SETUP.md`
+pins `python3.12 -m venv`. Phase 1 runtime still only needs
+fastapi/uvicorn/pydantic-settings/requests; rest are Phase 2 / speculative.
 
 ## Logging / monitoring touchpoints (graded deliverable)
 
@@ -107,6 +108,22 @@ stdlib `logging`, configured in `main.py`. Touchpoints:
 - `crm.py` — INFO on interaction written; `logger.exception` on Airtable failures
 
 Phone numbers are masked to last-4 in logs (PII). Verified output live.
+
+**Per-call log files** (`app/logging_setup.py`): a contextvar holds the current
+`call.id` (set at the top of each endpoint); `PerCallFileHandler` routes every
+module's log line for that request into `log/<callId>.log` — so one file per
+call holds its tool lookup + write-back + Airtable logs. Console output kept for
+dev. Call id is filename-sanitized (external input). Verified: two calls → two
+separate, correctly-grouped files.
+
+**Call tracing (values + errors):** `tools.py` logs the tool name, the phone
+VAPI sent, and its source (`tool-arg` vs `caller-id`), then the found result;
+`crm.py` logs the matched name, or on a miss the `target` vs every scanned
+`candidate` (all masked `***last4`) so mismatches are obvious. Airtable errors
+are caught in `tools.py` and returned to VAPI as a graceful "unavailable"
+result instead of a 500. Lookup is fully server-side — VAPI POSTs the tool
+webhook, our server queries Airtable and returns the result string; VAPI never
+touches Airtable.
 
 ## VAPI credentials — which is which
 

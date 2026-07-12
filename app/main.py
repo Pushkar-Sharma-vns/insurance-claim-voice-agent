@@ -1,13 +1,9 @@
-import logging
-
 from fastapi import FastAPI
 
 from app.api.routers import tools, webhooks
+from app.logging_setup import setup_logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+setup_logging()
 
 app = FastAPI(title="Observe Insurance – Voice Agent API")
 

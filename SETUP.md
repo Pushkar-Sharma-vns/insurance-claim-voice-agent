@@ -28,10 +28,20 @@ Create a **Personal Access Token** (scopes: `data.records:read`, `data.records:w
 ## 2. Backend
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3.12 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env      # fill in values
 uvicorn app.main:app --reload --port 8000
+```
+
+Expose it publicly (VAPI needs an HTTPS webhook URL). One-time ngrok setup:
+
+```bash
+brew install ngrok                       # if not installed
+ngrok config add-authtoken 3GPFGC6p3YzuhJSBkf8a5lFAUcX_6KbFhrgeoAyi9RhNYW555  # free token from dashboard.ngrok.com
+```
+
+```bash
 ngrok http 8000           # note the https URL -> BASE
 ```
 

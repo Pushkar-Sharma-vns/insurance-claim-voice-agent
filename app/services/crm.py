@@ -39,9 +39,12 @@ def lookup_by_phone(phone: str) -> Customer | None:
     except requests.RequestException:
         logger.exception("Airtable lookup failed phone=%s", mask_phone(phone))
         raise
-    for rec in resp.json().get("records", []):
+    records = resp.json().get("records", [])
+    for rec in records:
         f = rec["fields"]
         if _digits(f.get("Phone", "")) == target:
+            logger.info("lookup matched target=%s name=%s %s",
+                        mask_phone(phone), f.get("First Name", ""), f.get("Last Name", ""))
             return Customer(
                 first_name=f.get("First Name", ""),
                 last_name=f.get("Last Name", ""),
@@ -49,6 +52,10 @@ def lookup_by_phone(phone: str) -> Customer | None:
                 claim_status=f.get("Claim Status", ""),
                 claim_id=f.get("Claim ID", ""),
             )
+    # no match: log target vs the candidates we scanned (masked) so mismatches are debuggable
+    candidates = [mask_phone(r["fields"].get("Phone", "")) for r in records]
+    logger.info("lookup no match target=%s scanned=%d candidates=%s",
+                mask_phone(phone), len(records), candidates)
     return None
 
 

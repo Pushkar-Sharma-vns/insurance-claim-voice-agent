@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import verify_vapi_secret
+from app.logging_setup import call_id_var
 from app.services import crm
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ def end_of_call(payload: dict):
         return {"status": "ignored"}
 
     call = msg.get("call") or {}
+    call_id_var.set(call.get("id", "?"))
     analysis = msg.get("analysis") or {}
     structured = analysis.get("structuredData") or {}
 
