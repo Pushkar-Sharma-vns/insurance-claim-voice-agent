@@ -1,0 +1,55 @@
+{
+  "project": "Observe Insurance – Voice AI Claims Support Agent",
+  "last_updated_turn": 3,
+  "current_phase": "Phase 1 – VAPI-native (backend code-complete, awaiting live config)",
+  "strategy": "Build BOTH VAPI paths. Phase 1 = VAPI-native (reliable demo). Phase 2 = Custom LLM (technical showcase). Shared backend so no wasted work.",
+  "stack": {
+    "telephony_edge": "VAPI (PSTN, orchestration, endpointing, barge-in)",
+    "stt": "Deepgram Nova (VAPI default) – TBD confirm",
+    "tts": "ElevenLabs Turbo or Deepgram Aura – TBD confirm (latency vs quality)",
+    "llm_native": "VAPI-hosted GPT-4o-mini or Gemini Flash (Phase 1)",
+    "llm_custom": "TBD – Gemini 2.5 Flash vs Claude Haiku (Phase 2)",
+    "backend": "FastAPI (Python) – single server, all adapters",
+    "data": "Airtable (Customers, Interactions tables)",
+    "hosting_dev": "ngrok tunnel for public HTTPS webhook",
+    "hosting_prod": "TBD – Render / Railway / Fly.io"
+  },
+  "decisions": [
+    {"id": "D1", "decision": "Build both native + custom LLM paths", "why": "Native de-risks live demo; custom LLM showcases engineering depth for panel"},
+    {"id": "D2", "decision": "Native first, end-to-end, then custom LLM", "why": "Always have a working fallback demo"},
+    {"id": "D3", "decision": "Shared core (Airtable service, prompts, schemas); only transport adapter differs", "why": "Ports & adapters; Phase 2 reuses Phase 1 integrations; strong panel talking point"},
+    {"id": "D4", "decision": "Use VAPI end-of-call-report webhook + structured outputs for summary/sentiment", "why": "VAPI extracts these from transcript; don't rebuild a summarizer/sentiment classifier"},
+    {"id": "D5", "decision": "FAQ facts go in system prompt, not a hardcoded-JSON LLM bypass", "why": "Bypass needs intent-classification anyway; in-context static facts have negligible hallucination risk"},
+    {"id": "D6", "decision": "Corrected VAPI schemas: call.customer.number is nested, Message.content is Optional", "why": "Verified against VAPI docs + Flask reference server; original flat schema drops phone number / crashes on tool turns"}
+  ],
+  "tradeoffs": [
+    {"topic": "Custom LLM vs native", "chosen": "Both", "cost": "More build effort", "benefit": "Reliable demo + depth showcase; shared backend keeps extra cost low"},
+    {"topic": "State management (Phase 2)", "note": "Derive state from message history VAPI resends each turn; avoid in-memory store (breaks on multi-worker). Redis only if needed."},
+    {"topic": "Structured outputs timing", "note": "Not synchronous in end-of-call-report webhook; poll GET /call/{id} a few seconds after, or accept summary-only in webhook"},
+    {"topic": "Latency (Phase 2)", "note": "Custom LLM adds a hop; cache customer record after first lookup, keep Airtable read off the token-streaming path"}
+  ],
+  "past_steps": [
+    "Reviewed TASK.md + VAPI_ARCHITECTURE_DOC.md",
+    "Verified VAPI Custom LLM payload, SSE format, tool-calling, end-of-call-report against official docs + VapiAI Flask reference",
+    "Corrected 2 schema errors (nested customer.number, Optional content)",
+    "Agreed on both-paths, native-first strategy with shared backend",
+    "Locked stack: Gemini 2.5 Flash (Phase 2), ngrok dev, VAPI+Airtable accounts ready",
+    "Built Phase 1 backend: config, crm.py (Airtable via requests), tools/lookup-claim, webhooks/end-of-call, dependencies (secret auth), main.py",
+    "Verified: unit test (phone normalize) passes; app imports; TestClient confirms 401 auth, tool results shape, end-of-call type-gating",
+    "Wrote SETUP.md (Airtable schema, VAPI assistant config, tool JSON, analysis plan, system prompt)",
+    "Added stdlib logging across auth/tools/webhooks/crm with PII-masked phone (***last4); verified log output; covers the graded monitoring/logging deliverable",
+    "Clarified VAPI creds: our webhook uses an invented VAPI_SECRET (X-Vapi-Secret); private key is Phase 2 API auth; public key/assistant_id/phone number live in dashboard. Added vapi_private_key to config/.env"
+  ],
+  "current_step": "Phase 1 backend done + verified in code. Next: user runs live VAPI config + test call.",
+  "next_steps": [
+    "USER: create Airtable tables + seed (incl. own phone), fill .env, run uvicorn + ngrok",
+    "USER: configure VAPI assistant per SETUP.md (tool url, server url, analysis plan, system prompt), assign phone number",
+    "Live end-to-end test call; confirm Interactions row written",
+    "THEN Phase 2: custom LLM /chat/completions (SSE) with Gemini 2.5 Flash, reuse crm + webhook"
+  ],
+  "notes": [
+    "Env is Python 3.9.6 -> used `from __future__ import annotations` for X|None syntax",
+    "requirements.txt has speculative mcp/anthropic/websockets; mcp>=1.1.0 won't install on 3.9. Phase 1 needs only fastapi/uvicorn/pydantic-settings/requests (+httpx for tests)",
+    "Skipped: transferCall tool wiring (add during VAPI config), Phase 2 entirely"
+  ]
+}
