@@ -4,3 +4,7 @@ venv
 log
 __init__
 *.pyc
+*.db
+*.db-shm
+*.db-wal
+skills-lock.json

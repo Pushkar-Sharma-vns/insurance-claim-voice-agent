@@ -217,6 +217,56 @@ hardcode from memory).
 > and ready to build V1.** Build order: S1 orchestration loop → S2 SQLite store
 > → S3 turn trace → S4 post-processing + metrics. No Phase 2 code written yet.
 
+## Phase 2 · V1 — BUILT (turn 25)
+
+All four sections are code-complete. The brain lives in `app/agent/`
+(`state.py`, `prompts.py`, `tools.py`, `loop.py`, `knowledge.py`) behind
+`POST /vapi/chat/completions` (`app/api/routers/chat.py`). One SQLite DB
+(`app/services/store.py`) carries S2/S3/S4; post-processing is
+`app/services/postprocess.py`; metrics `app/metrics.py`; ROI writeup `METRICS.md`;
+acceptance harness `harness.py`.
+
+**Verified.** `python harness.py` — the deterministic safety checks pass
+(renderer-as-gate withholds claim_status until `identity_verified`, confirm_identity
+flip, 2nd-denial escalation, no-record/CRM-error/FAQ fallbacks, SSE shape). A full
+offline plumbing run (HTTP→SSE tool loop, S2/S3 SQLite writes, S4 post-processing +
+metrics, with LiteLLM and Airtable stubbed) passes end-to-end.
+
+**Build-time facts (web-verified per CLAUDE.md).** litellm 1.92.0; model id
+`gemini/gemini-2.5-flash`; tool-calling is standard OpenAI shape; S4 structured
+output via `response_format={"type":"json_object","response_schema":<flat>}`; price
+$0.30/1M in, $2.50/1M out.
+
+**One deliberate change from the plan.** The final answer is streamed by *chunking
+the resolved string* (one generation per turn), **not** `stream_options.include_usage`
+— Gemini has a known `content:None` bug with that flag. Completion tokens come from
+`litellm.token_counter` (the plan's fallback, now primary). Real token-streaming with
+tool interception remains the #1 V2 item. Post-processing runs synchronously
+(`litellm.completion`) because the end-of-call webhook is a sync handler.
+
+**Live-Gemini E2E — PASSED.** `python harness.py --live` runs 3 real Gemini turns
+(greet → `lookup_claim` → `confirm_identity` → gated status reveal) with Airtable
+stubbed. The renderer-as-gate held: no claim_status before verification. The live run
+caught two real bugs, now fixed:
+- litellm's `acompletion` lazily imports its MCP handler, which needs **`orjson`**
+  (not auto-installed) — would have broken *every* server turn. Added to requirements.
+- the harness live path didn't call `store.init_db()` — fixed.
+
+`confirm_identity(confirmed=True)` now returns the claim_status *in its tool result*
+(only reachable when confirmed, same gate) so the agent reveals it on the same turn as
+verification instead of the next — the per-turn context is built pre-flip. The
+renderer-as-gate still governs every subsequent turn.
+
+**Repo reorg.** Docs + data JSON moved to `docs/` (TASK, VAPI_ARCHITECTURE_DOC, SETUP,
+METRICS, progress*, handoffs, faqs.json, fallbacks.json); `knowledge.py` loads the FAQ/
+fallback JSON from `docs/`. Kept at root: `CLAUDE.md` (project-instructions convention)
+and `skills-lock.json` (tooling lockfile).
+
+**Only pending:** a real VAPI dashboard telephony call (Model → Custom LLM → URL
+`{BASE}/vapi/chat/completions`, header `X-Vapi-Secret`; see the Phase 2 section of
+`docs/SETUP.md`). The VAPI end-of-call transcript field path is read defensively
+(`msg.transcript || msg.artifact.transcript`) — confirm on a real report.
+
 ## VAPI credentials — which is which
 
 - **Webhook auth (VAPI→us):** our own `VAPI_SECRET`, set as `server.secret` in VAPI,

@@ -3,6 +3,8 @@ uvicorn[standard]
 pydantic
 pydantic-settings
 google-generativeai
+litellm
+orjson  # litellm imports it lazily on the acompletion path
 requests
 websockets
 python-dotenv

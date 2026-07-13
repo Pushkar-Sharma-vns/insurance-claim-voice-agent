@@ -1,9 +1,70 @@
 {
   "project": "Observe Insurance – Voice AI Claims Support Agent",
   "phase": "Phase 2 – Custom LLM (bring-your-own-brain via VAPI /chat/completions SSE)",
-  "last_updated_turn": 24,
+  "last_updated_turn": 25,
   "premise": "Phase 1 (VAPI-native) is tested + working and stays as the reliable demo fallback. Phase 2 swaps ONLY the brain: our server implements an OpenAI-compatible /chat/completions SSE endpoint that VAPI calls each turn. VAPI still owns telephony/STT/TTS/endpointing/barge-in. We own the agentic layer: orchestration, state, tool-calling, extraction, post-processing, CRM, memory.",
-  "status": "PLANNING COMPLETE — all 4 sections (S1-S4) deep-planned & ready to build V1. No Phase 2 code yet. Next: build in order S1 loop -> S2 store -> S3 trace -> S4 postprocess/metrics.",
+  "status": "V1 BUILT + LIVE-GEMINI E2E PASSED + end-of-call webhook error-handling FINALIZED & verified. Deterministic safety checks PASS; offline plumbing VERIFIED; `python harness.py --live` PASSED (greet->lookup_claim->confirm_identity->gated status reveal, zero leak). Webhook now: 200-always, Airtable sync no-retry, SQLite fallback (airtable_synced flag). READY FOR USER TELEPHONY TESTING — user to place a real VAPI dashboard call next.",
+  "live_verified_turn26": {
+    "result": "PASS — 3 real Gemini turns; renderer-as-gate held (no claim_status before verify); status revealed same-turn as confirmation after the confirm_identity fix.",
+    "bugs_caught_by_live_run": [
+      "litellm acompletion lazily imports its MCP handler -> needs orjson (not auto-installed). Would break EVERY server turn. FIX: pip install orjson + added to requirements.txt.",
+      "harness live path never called store.init_db() (only app.main does, which harness doesn't import) -> 'no such table: turns'. FIX: store.init_db() at top of live_e2e."
+    ],
+    "confirm_identity_improvement": "confirm_identity(confirmed=True) now returns claim_status IN its tool result (only reachable when confirmed=True, same gate). Without it the reveal slipped to the next turn because the per-turn context is built pre-flip. Renderer-as-gate still governs all subsequent turns.",
+    "reorg": "docs+data json moved to docs/ (TASK, VAPI_ARCHITECTURE_DOC, SETUP, METRICS, progress*, handoffs, faqs.json, fallbacks.json). knowledge.py loads faqs/fallbacks from docs/. KEPT AT ROOT: CLAUDE.md (Claude Code project-instructions convention), skills-lock.json (tooling lockfile)."
+  },
+  "webhook_error_handling_turn27": {
+    "decision_id": "S4-D7",
+    "context": "Iterated the end-of-call webhook error handling with the user. Two CRM error moments, two behaviors — do NOT conflate them.",
+    "mid_call_crm_error": "Happens in /chat/completions (lookup_claim tool). ALREADY BUILT in app/agent/loop.py + docs/fallbacks.json: ToolError(crm_lookup_error) -> turn returns 200 SSE speaking the FIRST-tier mapped fallback ('trouble pulling up your account, confirm your number'); caller responds -> next turn re-runs lookup_claim; 2nd failure (error_counts>=2) -> REPEAT tier -> escalate to human callback + phase=escalating. NO blind retry; the re-attempt is driven by the caller's next utterance. This is exactly the behavior the user described.",
+    "end_of_call_airtable_write": "Fires AFTER the call — no customer to re-prompt. FINAL DESIGN (user chose '200 + SQLite fallback, no retry'): attempt Airtable write SYNCHRONOUSLY so we KNOW the outcome; on failure do NOT return 5xx (no blind VAPI retry) — log it, keep the record in SQLite flagged airtable_synced=0, return 200. Airtable success -> airtable_synced=1. Response body: {status:logged, phase, airtable_synced:bool}.",
+    "why_not_5xx": "A blind VAPI retry re-hits our endpoint without telling anyone anything and risks duplicate writes. User: 'we dont want retry without telling customer anything.' At end-of-call there IS no customer, so the fallback is durable local persistence + a V2 reconciliation job, not a retry.",
+    "reliability_tiers": "Airtable Interactions = CRM source of truth (sync, outcome known, surfaced via airtable_synced). SQLite = durable local copy / fallback (best-effort; its own failure is tolerable and never surfaced -> still 200). 'sqlite is fine' per user.",
+    "schema_change": "Added calls.airtable_synced INTEGER (store.py CREATE TABLE). Reconciliation query: SELECT * FROM calls WHERE airtable_synced=0. NOTE: CREATE TABLE IF NOT EXISTS won't add the column to a pre-existing DB — the dev DB is ephemeral/gitignored so recreate it; a real migration (ALTER TABLE) is V2.",
+    "tradeoff_accepted": "Webhook is now SYNCHRONOUS (post-processing LLM + Airtable write before the 200) — no longer the 'fast async ack' of the original requirement #5. Necessary to know the Airtable outcome. Safe: VAPI webhook timeout ~20s vs our ~2-4s.",
+    "verified": "Offline TestClient run: airtable success->200 synced=1; airtable fail->200 NO retry, SQLite row kept synced=0 & findable; sqlite fail->still 200; method/auth/event-filter all pass. harness.py deterministic safety checks still PASS (loop/gate untouched). BackgroundTasks/502 approach from an earlier iteration was REVERTED.",
+    "not_built_v2": "Reconciliation job that re-pushes airtable_synced=0 rows to Airtable."
+  },
+  "auth_fix_turn28": {
+    "symptom": "First live call: POST /vapi/chat/completions -> 401 every turn; assistant produced nothing; call ended 'Assistant Did Not Receive Customer Audio'. Webhook (/webhooks/vapi/end-of-call) authed fine (200) and end-of-call fell to phase=1 (no in-memory state was ever created because every /chat/completions turn 401'd).",
+    "root_cause": "VAPI authenticates differently per surface: server webhooks/tools send `X-Vapi-Secret` header; custom LLM sends the secret in the `Authorization` header. Our verify_vapi_secret only checked X-Vapi-Secret, so the custom-LLM turns 401'd.",
+    "authorization_format_CONFIRMED": "Via user pdb inspection of the live request: for the custom LLM, VAPI sends the secret RAW in Authorization (just the token, NO 'Bearer ' prefix). Initial fix assumed 'Bearer <secret>' and stripped 7 chars -> still 401. CORRECTED: auth_token = strip 'Bearer ' IF present else use Authorization raw; accept VAPI_SECRET from x_vapi_secret OR auth_token.",
+    "fix": "app/api/dependencies.py verify_vapi_secret accepts VAPI_SECRET from X-Vapi-Secret OR Authorization (raw OR Bearer-prefixed). Empty-secret guarded. Improved rejection log: presence of each header + bearer_prefixed flag (never logs the secret). Verified via TestClient: raw-token->200, Bearer->200, X-Vapi-Secret->200, wrong/missing->401.",
+    "user_config_needed": "In VAPI dashboard, set the Custom LLM credential's key/secret to VAPI_SECRET. VAPI forwards it in Authorization (raw). Webhook still uses X-Vapi-Secret = server.secret = same VAPI_SECRET.",
+    "RESOLUTION_query_param": "Confirmed via masked fingerprint log that VAPI does NOT forward our secret to a custom LLM — it sends a fixed placeholder Bearer token (fingerprint 'no-…ded(len26)', i.e. no-custom-llm-key-...), NOT settable. FINAL FIX (user chose query-param bypass): Custom LLM URL = {BASE}/vapi/chat/completions?secret=<VAPI_SECRET>. verify_vapi_secret now also reads a `secret` Query param (fastapi Query) and accepts VAPI_SECRET from query OR Authorization(raw/Bearer) OR X-Vapi-Secret. Verified: ?secret=correct->200 (chat endpoint ran the loop end-to-end incl. real Gemini calls), ?secret=wrong->401, X-Vapi-Secret webhook->200. Debug print removed. Tradeoff noted: URL secret can appear in access logs (fine for demo). Webhook keeps X-Vapi-Secret (VAPI sends server.secret for server messages)."
+  },
+  "logging_improvement_turn29": {
+    "problem": "Per-call log files showed only INFO trace, no errors. Root cause: PerCallFileHandler only writes when call_id_var is set, but auth rejections (the 401 on /chat/completions) are logged in the dependency BEFORE call_id is set -> went to console only, never to any file. No durable catch-all log; unhandled exceptions not guaranteed a traceback line.",
+    "fix": [
+      "logging_setup.py: added log/app.log RotatingFileHandler (5MB x3) as a durable CATCH-ALL — every record from every module lands here regardless of call context, incl. pre-call-id errors + full tracebacks. Format now includes %(funcName)s so error lines say where they came from. PerCallFileHandler.emit wrapped in try/except (logging never crashes a request). uvicorn/uvicorn.error routed through our sinks (propagate=True).",
+      "main.py: global @app.exception_handler(Exception) -> logger.exception('Unhandled error on <method> <path>') + clean 500 JSON, so uncaught errors always get a traceback+context line."
+    ],
+    "verified": "app.log + per-call file both created and both contain the ValueError traceback; auth-style warning logged with no call_id appears in app.log but NOT in any per-call file (correct). harness deterministic PASS; app imports OK.",
+    "suggested_next": "Optionally enrich the auth-rejection warning in dependencies.py to log which credential was present (x_vapi_secret vs bearer, presence/length only — never the secret) — left to user (file was open/being edited)."
+  },
+  "build_state_turn25": {
+    "endpoint": "POST /vapi/chat/completions (prefix /vapi in main.py)",
+    "files_created": [
+      "app/agent/__init__.py, knowledge.py (faqs+fallbacks loaders), state.py (ConversationState+in-mem store), prompts.py (renderer-as-gate), tools.py (3 tools+ToolError), loop.py (orchestration+extractor+S3 trace)",
+      "app/api/routers/chat.py (SSE endpoint)",
+      "app/services/store.py (SQLite S2/S3), app/services/postprocess.py (S4 flat structured output, SYNC litellm.completion), app/metrics.py (S4 SQL)",
+      "fallbacks.json (7 scenarios x first/repeat), METRICS.md (ROI + tuning loop), harness.py (S1.7)"
+    ],
+    "files_edited": ["requirements.txt (+litellm 1.92.0)", "app/main.py (init_db + chat router)", "app/api/routers/webhooks.py (S4-D5 phase-2 branch; phase-1 path preserved verbatim)", "SETUP.md (Phase 2 section)"],
+    "build_verified_facts": [
+      "litellm 1.92.0 installed; model id 'gemini/gemini-2.5-flash' recognized (in model_cost); token_counter works offline",
+      "LiteLLM Gemini tool-calling = standard OpenAI shape (message.tool_calls[].function.name/.arguments(JSON str)/.id; results back as {role:tool,tool_call_id,content})",
+      "S4 structured output = response_format={'type':'json_object','response_schema':<FLAT schema>}",
+      "DECISION CHANGE from plan: stream final answer by CHUNKING the resolved string (single generation/turn), NOT stream_options include_usage — Gemini has a known content:None bug when include_usage is on. Completion tokens via litellm.token_counter (the planned fallback becomes the primary). Prompt tokens from resp.usage on the no-tool call, token_counter fallback. Real token-streaming w/ tool interception stays V2 (user #1).",
+      "postprocess is SYNC (litellm.completion) since the end-of-call webhook is sync def — avoids event-loop juggling; matches S1.4 'inline/synchronous in webhook'",
+      "gemini-2.5-flash price web-verified: $0.30/1M in, $2.50/1M out"
+    ],
+    "still_pending_live_verify": [
+      "python harness.py --live (real Gemini tool-calling E2E: greet->lookup->confirm->gated status) — BLOCKED on GEMINI_API_KEY",
+      "VAPI end-of-call transcript field path (used msg.transcript || msg.artifact.transcript defensively; confirm on a real report)",
+      "real VAPI dashboard call end-to-end"
+    ]
+  },
   "versioning_approach": {
     "principle": "Ship a working end-to-end slice FIRST, then layer depth. Applies to ALL 4 sections.",
     "V1": "Minimal necessary: happy path + main test case (greet -> auth -> confirm identity -> claim status -> end -> write interaction) + 1-2 edge cases, testable end-to-end.",

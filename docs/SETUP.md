@@ -135,3 +135,36 @@ First message: "Thanks for calling Observe Insurance, this is Sam. Can I get the
 
 Assign a VAPI phone number to the assistant, call it, walk the flow, hang up.
 Check the Interactions table for a new row.
+
+---
+
+## Phase 2 — Custom LLM (bring-your-own-brain)
+
+Phase 2 swaps only the brain: our server implements the OpenAI-compatible SSE
+endpoint VAPI calls each turn. VAPI still owns telephony/STT/TTS. Phase 1 stays
+as the fallback demo, untouched.
+
+1. **Env:** set `GEMINI_API_KEY` in `.env` (Gemini 2.5 Flash via LiteLLM).
+   Reuses the same `VAPI_SECRET` + Airtable creds as Phase 1.
+2. **Install:** `pip install -r requirements.txt` (adds `litellm`).
+3. **VAPI dashboard:** Assistant → **Model → Custom LLM**.
+   - URL (**auth via query param**): `{BASE}/vapi/chat/completions?secret=<VAPI_SECRET>`
+     (e.g. `https://<ngrok>.ngrok.app/vapi/chat/completions?secret=observe_agent_secret_080101`)
+   - **Why the query param:** VAPI does NOT forward your secret to a Custom LLM — its
+     `Authorization: Bearer` for a custom LLM is a fixed placeholder (`no-custom-llm-key-…`)
+     you can't set. So we pass the secret in the URL. `verify_vapi_secret` accepts the shared
+     `VAPI_SECRET` from the `?secret=` query param, an `Authorization` header, or `X-Vapi-Secret`.
+     (Tradeoff: a URL secret can appear in access/proxy logs — fine for this demo.)
+   - The dashboard system-prompt field is **ignored** — our server strips VAPI's
+     system message and injects its own static+dynamic prompt.
+   - Keep the same **end-of-call webhook** (`{BASE}/webhooks/vapi/end-of-call`, auth via
+     `X-Vapi-Secret` = `server.secret`, which VAPI DOES send for server messages); it branches
+     to Phase-2 post-processing automatically when it recognizes the call.
+4. **Verify before a live call:**
+   - `python harness.py` — deterministic safety checks (identity gate, escalation, fallbacks).
+   - `python harness.py --live` — real-Gemini E2E happy path (needs `GEMINI_API_KEY`).
+5. **After calls:** `python -m app.metrics` for the ROI report (see `METRICS.md`).
+
+State lives in one SQLite DB (`data/conversations.db`) created on startup: `calls`
++ `messages` (transcript/memory) + `turns` (per-turn trace). Single-worker demo
+scale — run one uvicorn worker.

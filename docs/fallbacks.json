@@ -1,0 +1,31 @@
+{
+  "_comment": "S1.6 fallback map. Each scenario -> {first, repeat} tiers. Handler tracks state.error_counts[key]; 1st hit = first tier, 2nd hit of SAME key = repeat tier (warmer, humbler, gentle-sales, escalate to human/callback). Returned as a normal assistant message, never a raw 500.",
+  "crm_lookup_error": {
+    "first": {"response": "I'm having a little trouble pulling up your account right now. Let me try that once more — could you confirm the phone number on your policy?", "action": "retry"},
+    "repeat": {"response": "I'm so sorry for the hold-up — our records system isn't cooperating at the moment. Rather than keep you waiting, I'll have one of our representatives call you back personally to sort this out. We really appreciate your patience.", "action": "offer_callback"}
+  },
+  "api_failure": {
+    "first": {"response": "Sorry about that — something on my end hiccuped. Could you say that once more for me?", "action": "retry"},
+    "repeat": {"response": "I truly apologize for the trouble. To make sure you're taken care of, I'll arrange for a human representative to follow up with you directly. Thank you so much for bearing with me.", "action": "human_followup"}
+  },
+  "timeout": {
+    "first": {"response": "That's taking a little longer than usual — give me just one more moment.", "action": "retry"},
+    "repeat": {"response": "I'm sorry to keep you waiting. Rather than hold you up any longer, I'll have a representative call you back so we can get this handled properly. I appreciate your patience.", "action": "offer_callback"}
+  },
+  "llm_error": {
+    "first": {"response": "Apologies — I didn't quite catch that. Could you rephrase it for me?", "action": "retry"},
+    "repeat": {"response": "I'm sorry I'm having difficulty here. Let me get a human representative to follow up with you so you get the help you need. Thanks so much for your understanding.", "action": "human_followup"}
+  },
+  "no_record": {
+    "first": {"response": "I wasn't able to find an account under that phone number. Could you double-check the number for me, or is there another number your policy might be under?", "action": "retry"},
+    "repeat": {"response": "I still can't locate an account, and I don't want to leave you stuck. I'll have one of our representatives reach out to verify your details personally. Thank you for your patience.", "action": "human_followup"}
+  },
+  "identity_denied": {
+    "first": {"response": "No problem — for your security I do need to confirm it's really you before I can share claim details. Could you confirm your name for me?", "action": "retry"},
+    "repeat": {"response": "I completely understand, and for your protection I can only share those details once we've confirmed your identity. I'll have a representative follow up so we can verify you securely. Thanks for understanding.", "action": "human_followup"}
+  },
+  "malformed_request": {
+    "first": {"response": "Sorry, I didn't get that clearly. Could you repeat what you need help with?", "action": "safe_ack"},
+    "repeat": {"response": "I'm still not catching that clearly. Let me connect you with a representative who can help. Thank you for your patience.", "action": "human_followup"}
+  }
+}
