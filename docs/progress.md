@@ -262,10 +262,56 @@ METRICS, progress*, handoffs, faqs.json, fallbacks.json); `knowledge.py` loads t
 fallback JSON from `docs/`. Kept at root: `CLAUDE.md` (project-instructions convention)
 and `skills-lock.json` (tooling lockfile).
 
-**Only pending:** a real VAPI dashboard telephony call (Model → Custom LLM → URL
-`{BASE}/vapi/chat/completions`, header `X-Vapi-Secret`; see the Phase 2 section of
-`docs/SETUP.md`). The VAPI end-of-call transcript field path is read defensively
-(`msg.transcript || msg.artifact.transcript`) — confirm on a real report.
+## Phase 2 · V1 — VALIDATED ON A REAL VAPI CALL (turn 30)
+
+A live VAPI telephony call ran the whole path end-to-end: VAPI custom LLM →
+`/vapi/chat/completions` (Gemini 2.5 Flash via LiteLLM) → tool loop → identity
+gate → SSE → end-of-call webhook → Airtable + SQLite persist. **Phase 2 V1 is
+complete and working in production-like conditions.**
+
+Two auth facts learned the hard way (both handled): VAPI does **not** forward our
+secret to a custom LLM (its `Authorization: Bearer` is a fixed placeholder), so auth
+is via a **`?secret=` query param**; and VAPI **appends `/chat/completions`** to the
+configured URL, so the query value arrives as `<secret>/chat/completions` and we strip
+everything after the first `/`. Webhooks still use `X-Vapi-Secret`.
+
+Pre-flight, all automated tests are green: `harness.py` (deterministic safety),
+`harness.py --live` (real Gemini), and a full HTTP E2E (`scratchpad/verify_e2e.py`):
+query-param auth → 3-turn SSE → tools → gate → phase-2 persist → metrics
+(containment 1.0, ~3100 tokens, ~$0.0012/call, tool-success 1.0, ~2.6 s/turn).
+
+Store is self-healing (`_conn()` runs `CREATE … IF NOT EXISTS` every connection), so a
+missing/blank `data/conversations.db` can't cause `no such table`. Logging: durable
+catch-all `log/app.log` + per-call files + global exception handler.
+
+**V1 done. Next = V2:** top priority is streaming-with-tool-interception to cut the
+~2.6 s/turn latency; then richer soft state, cross-call memory depth, full fallback
+map, FAQ RAG, and more seeded calls for ROI numbers.
+
+## Session `optimizing-agent-v1` (turn 31)
+
+- **Greeting/auth flow fixed:** greet + ask for the number FIRST; no tool call in the
+  greeting. Fixes the premature `lookup_claim` on an empty VAPI caller-ID that opened the
+  call with "I couldn't find your number" before the caller had spoken.
+- **Exact confirmation wording:** now asks the assignment's "Am I speaking with
+  {first} {last}?".
+- **Fuzzy CRM matching + alternative verification** (stdlib, no new dep):
+  `crm.all_customers()` + `crm.match(phone, name)`. Phone = exact last-10 digits, else
+  Levenshtein ≤2 (mis-heard/dropped/extra digit). One match → confirm; several → ask full
+  name to disambiguate; none → ask full name (alt verification) then human follow-up.
+  Covered by `test_fuzzy_match.py` + new `harness.py` checks (all green).
+- **Latency, evidence-based re-scope:** real probes on Gemini 2.5 Flash (native
+  `google-genai`) show warm TTFT ~0.96s text / ~1.46s tool-round1 / ~0.94s tool-round2;
+  `function_call` comes as one whole chunk. Conclusion: streaming alone is a modest win —
+  the real lever is cutting round-trips. Top pick: **inline the KB, drop `faq_lookup`**
+  (FAQ turns 2→1 round-trip, ~1.7s saved) — awaiting the tradeoff decision — then migrate
+  `loop.py` to native-SDK streaming + intercept-every-round.
+- **Escalation & Safety (cap #4) tuned, prompt-only:** human handoff now **deflects once**
+  (try to help first) and only escalates on insistence; emergencies go straight to 911;
+  off-topic gets a scope redirect. Human handoff no longer routes through `faq_lookup`.
+  Verified live (`scratchpad/scenario_escalation.py`). Caveat: prompt-only handoff does not
+  set `phase=ESCALATING`, so it is not counted in the containment metric (add a state hook
+  if that's wanted later).
 
 ## VAPI credentials — which is which
 

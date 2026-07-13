@@ -31,17 +31,25 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "lookup_claim",
-            "description": "Look up the caller's account and claim by phone number. Uses the "
-                           "caller's own number automatically. Returns the name on file only.",
+            "description": "Look up the caller's account and claim by the phone number they give "
+                           "you. Returns the name on file only. Call this only after the caller "
+                           "has spoken a phone number. If it reports multiple or no matches, "
+                           "ask the caller for their full name and call it again with full_name.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "phone_number": {
                         "type": "string",
-                        "description": "Optional. Only if the caller gives a different number "
-                                       "than the one they're calling from.",
-                    }
+                        "description": "The phone number the caller gave, digits only.",
+                    },
+                    "full_name": {
+                        "type": "string",
+                        "description": "The caller's full name (first and last). Provide this to "
+                                       "disambiguate multiple matches or as alternative "
+                                       "verification when the number does not match.",
+                    },
                 },
+                "required": ["phone_number"],
             },
         },
     },
@@ -97,23 +105,38 @@ def execute(name: str, args: dict, st: ConversationState) -> str:
 
 def _lookup_claim(args: dict, st: ConversationState) -> str:
     phone = args.get("phone_number") or st.caller_phone
-    logger.info("tool=lookup_claim call=%s phone=%s", st.call_id, crm.mask_phone(phone))
+    name = args.get("full_name") or ""
+    logger.info("tool=lookup_claim call=%s phone=%s name=%s",
+                st.call_id, crm.mask_phone(phone), bool(name))
     try:
-        cust = crm.lookup_by_phone(phone)
+        cands = crm.match(crm.all_customers(), phone=phone, name=name)
     except requests.RequestException:
         raise ToolError("crm_lookup_error")
 
-    if cust is None:
-        tier = st.bump_error("no_record")
-        fb = kb.fallback("no_record", tier)
-        return f"No account found for that number. Tell the caller, warmly: {fb['response']}"
+    if len(cands) == 1:
+        cust = cands[0]
+        st.customer = cust
+        st.phase = st_mod.AUTHENTICATING
+        # NAME ONLY — claim_status is never returned here (S1-D12); it reaches the model
+        # only through the renderer once identity_verified=true.
+        return (f"Account found. Name on file: {cust.full_name}. Confirm identity by asking "
+                f"exactly 'Am I speaking with {cust.full_name}?', then call confirm_identity. "
+                "Do NOT share claim status yet.")
 
-    st.customer = cust
-    st.phase = st_mod.AUTHENTICATING
-    # NAME ONLY — claim_status is never returned here (S1-D12); it reaches the model
-    # only through the renderer once identity_verified=true.
-    return (f"Account found. Name on file: {cust.full_name}. Greet them by name, ask them to "
-            "confirm their identity, then call confirm_identity. Do NOT share claim status yet.")
+    if len(cands) > 1:
+        return ("Multiple accounts are close to that number — the number may have been misheard. "
+                "Ask the caller for their full name (first and last), then call lookup_claim "
+                "again with both phone_number and full_name.")
+
+    # zero matches: alternative verification by name before giving up (S1 fallback)
+    if not name and not st.name_attempted:
+        st.name_attempted = True
+        return ("No account matches that number; it may have been misheard. Ask the caller for "
+                "their full name (first and last) to try another way, then call lookup_claim "
+                "again with phone_number and full_name.")
+    tier = st.bump_error("no_record")
+    fb = kb.fallback("no_record", tier)
+    return f"Still no match after alternative verification. Tell the caller, warmly: {fb['response']}"
 
 
 def _confirm_identity(args: dict, st: ConversationState) -> str:

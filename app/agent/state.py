@@ -23,6 +23,7 @@ class ConversationState(BaseModel):
     caller_phone: str = ""
     phase: str = GREETING
     identity_verified: bool = False
+    name_attempted: bool = False  # alternative verification (by name) already tried
     customer: Customer | None = None
     turn_count: int = 0
     error_counts: dict[str, int] = Field(default_factory=dict)

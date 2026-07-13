@@ -17,7 +17,7 @@ import requests
 
 from app.agent import knowledge as kb
 from app.agent import loop, prompts, state, tools
-from app.agent.state import ESCALATING, HANDLING, ConversationState
+from app.agent.state import AUTHENTICATING, ESCALATING, HANDLING, ConversationState
 from app.agent.tools import ToolError
 from app.config import settings
 from app.schemas.internal import Customer
@@ -57,33 +57,53 @@ def check_denied_escalation():
     print("ok  2nd identity denial escalates (repeat tier)")
 
 
+def check_fuzzy_lookup():
+    st = ConversationState(call_id="t-fuzzy")
+    orig = crm.all_customers
+    crm.all_customers = lambda: [CUST]  # phone +14155550100
+    try:
+        r = tools.execute("lookup_claim", {"phone_number": "4155550109"}, st)  # 1 digit off
+        assert st.customer is CUST and st.phase == AUTHENTICATING
+        assert "Jane Doe" in r
+    finally:
+        crm.all_customers = orig
+    print("ok  lookup_claim fuzzy (1 digit off) resolves the single account")
+
+
 def check_no_record():
     st = ConversationState(call_id="t-norec")
-    orig = crm.lookup_by_phone
-    crm.lookup_by_phone = lambda _p: None
+    orig = crm.all_customers
+    crm.all_customers = lambda: []  # empty CRM -> no candidates
     try:
-        r = tools.execute("lookup_claim", {"phone_number": "+10000000000"}, st)
+        # first miss (no name) -> alternative verification, NOT yet a no_record fallback
+        r1 = tools.execute("lookup_claim", {"phone_number": "+10000000000"}, st)
+        assert st.name_attempted and "no_record" not in st.error_counts
+        assert "full name" in r1.lower()
+        # caller gives a name, still nothing -> now the no_record fallback fires
+        r2 = tools.execute(
+            "lookup_claim", {"phone_number": "+10000000000", "full_name": "Jane Roe"}, st
+        )
+        assert st.error_counts["no_record"] == 1 and r2
     finally:
-        crm.lookup_by_phone = orig
-    assert st.error_counts["no_record"] == 1 and "No account" in r
-    print("ok  lookup_claim no-record bumps no_record + conversational fallback")
+        crm.all_customers = orig
+    print("ok  lookup_claim no-match -> alt verification (name) then no_record fallback")
 
 
 def check_crm_error():
     st = ConversationState(call_id="t-crm")
-    orig = crm.lookup_by_phone
+    orig = crm.all_customers
 
-    def boom(p):
+    def boom():
         raise requests.ConnectionError("down")
 
-    crm.lookup_by_phone = boom
+    crm.all_customers = boom
     try:
-        tools.execute("lookup_claim", {}, st)
+        tools.execute("lookup_claim", {"phone_number": "5551234567"}, st)
         assert False, "should have raised ToolError"
     except ToolError as e:
         assert e.fallback_key == "crm_lookup_error"
     finally:
-        crm.lookup_by_phone = orig
+        crm.all_customers = orig
     print("ok  crm failure raises ToolError(crm_lookup_error)")
 
 
@@ -112,6 +132,7 @@ def deterministic():
     check_renderer_gate()
     check_confirm_flip()
     check_denied_escalation()
+    check_fuzzy_lookup()
     check_no_record()
     check_crm_error()
     check_faq()

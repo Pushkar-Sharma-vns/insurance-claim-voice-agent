@@ -1,48 +1,55 @@
-# Observe.AI – Take-Home Assessment: AI Agent Demo Architect
+# Observe.AI – Take-Home Assessment (AI Agent Demo Architect)
 
-## 🎯 Objective
-Demonstrate the ability to design, integrate, and optimize a VoiceAI agent from a technical and analytical standpoint. The goal is to build a voice-enabled assistant that simulates a real inbound customer support call, evaluating practical skills in conversational design, workflow logic, data integration, and product reasoning.
+> Verbatim assignment brief. This is the authoritative source of truth for scope and deliverables.
 
----
+## Objective
+Demonstrate your ability to design, integrate, and optimize a VoiceAI agent from a technical and analytical standpoint. This take-home challenge places you in the role of an AI Agent Engineer. You will design and build a voice-enabled assistant that simulates a real inbound customer support call. The goal is to evaluate your practical skills in conversational design, workflow logic, data integration, and overall product reasoning.
 
-## 🏢 Scenario: “AI Claims Support Assistant for Observe Insurance”
-Build a VoiceAI Agent that handles inbound calls from customers checking on their insurance claim status. 
+## Scenario: “AI Claims Support Assistant for Observe Insurance”
+You are tasked with building a VoiceAI Agent that handles inbound calls from customers checking on their insurance claim status. Your AI assistant should support the following capabilities:
 
-### Core Capabilities
+1. **Greeting & Authentication:** The assistant greets the caller and asks for the phone number associated with their account. It uses this number to look up the caller in an external data source (e.g., Google Sheets, Notion, Airtable) containing first name, last name, phone number and claim status. If the record is found, the assistant confirms the identity by asking, “Am I speaking with {first name} {last name}?” and continues upon confirmation. If the number does not match a record — or the caller denies the identity — the assistant should gracefully attempt alternative verification or indicate that a human representative will follow up.
 
-* **1. Greeting & Authentication:** * Greet the caller and request their phone number.
-    * Look up the caller in an external data source (e.g., Airtable, Google Sheets) to find First Name, Last Name, Phone Number, and Claim Status.
-    * **Success Path:** Confirm identity ("Am I speaking with {first name} {last name}?").
-    * **Fallback Path:** If the record is missing or identity is denied, gracefully attempt alternative verification or escalate to a human.
-* **2. Claim Status Handling:** * Retrieve and communicate the claim status (Approved, Pending, or Requires Documentation).
-    * If documentation is required, provide clear submission instructions (e.g., portal upload or email to support@observeinsurance.com).
-* **3. FAQ Support:** * Answer common questions (office hours, mailing address, how to start a new claim, general process) using a simple internal knowledge base.
-* **4. Escalation & Safety Behavior:** * **Human Request:** Politely confirm a callback/transfer will be scheduled.
-    * **Emergency (911):** Instruct the caller to hang up and dial 911 immediately.
-    * **Off-topic:** Clarify the assistant's scope and guide the conversation back to the task.
-* **5. Call Completion & Summary Logging:** * Write a post-call record to an external "Interactions" table.
-    * Include: Caller Name (if authenticated), Conversation Summary, Call Sentiment (Positive/Neutral/Negative), and Timestamp.
+2. **Claim Status Handling:** After authentication, the assistant retrieves and communicates the caller’s claim status (e.g., approved, pending, or requires documentation). If the claim requires documentation, the agent provides clear instructions on how to submit it (e.g., upload to the portal or email support@observeinsurance.com).
 
-### 🎭 Persona & Tone
-Maintain a calm, supportive, and conversational tone. Accurately interpret questions and respond in a clear, reassuring, human-like manner.
+3. **FAQ Support:** The assistant should be able to answer common questions such as office hours, mailing address, how to start a new claim, and the general claims handling process. These responses may be supported by a simple internal knowledge base.
 
----
+4. **Escalation & Safety Behavior:** If the caller requests a representative, the assistant should politely confirm that a callback or transfer will be scheduled. If the caller indicates an emergency, the assistant should instruct them to hang up and dial 911 immediately. If the caller asks unrelated questions, the assistant should briefly clarify what it is able to help with and guide the conversation back to the task.
 
-## 📦 Deliverables for Panel Presentation
+5. **Call Completion & Summary Logging:** At the end of the call, the assistant writes a post-call record to an “interactions” table (Notion, Google Sheets, Airtable) including: caller name (if authenticated), summary of the conversation, call sentiment (simple: positive / neutral / negative), timestamp.
+
+Throughout the interaction, the assistant should maintain a calm, supportive, and conversational tone — accurately interpreting the caller’s questions and concerns, and responding in a clear, reassuring, human-like manner.
+
+You will use the agent you’ve built for a panel presentation. You will be asked to demonstrate the use case above in your presentation, then discuss the steps you’ve taken and technical challenges encountered in building out the use case.
+
+## Please have the following ready to discuss
 
 ### 1. VoiceAI Agent Build / Demonstration
-Build the agent using a preferred framework (Retell, VAPI, LiveKit, etc.) and integration platform. The demo must showcase two specific integrations:
-* **Data Retrieval:** Fetch caller information and claim status from an external system using a phone number.
-* **Data Write-back:** Log a post-call interaction record (name, summary, sentiment, timestamp) to an external table.
+- Use any VoiceAI builder (Retell, VAPI, n8n, LiveKit, etc.) or custom framework of your choice. Additionally, use any integration platform of your choice (Firebase Cloud Functions, n8n, Make.com, etc.).
+- Your agent must demonstrate two integrations:
+  - Retrieve caller information and claim status from an external system using the caller’s phone number.
+  - Write back a post-call interaction record (including caller name, summary, sentiment, and timestamp) to an external “interactions” table.
 
 ### 2. Solution Architecture Diagram
-Provide a brief write-up detailing the conversation flow and system architecture:
-* **Voice Flow Steps:** Greeting $\rightarrow$ Authentication $\rightarrow$ API Call $\rightarrow$ Response Handling $\rightarrow$ Fallback.
-* **Integration Points:** APIs, data storage, telephony routing, and TTS/STT/LLM layers.
-* **Monitoring/Logging:** Identify where errors or metrics are captured.
+Provide a brief write-up on conversation flow that includes:
+- Voice flow steps (greeting → authentication → API call → response handling → fallback)
+- Integration points (APIs, data storage, telephony routing, TTS/STT/LLM layers)
+- Monitoring or logging touchpoints (where errors or metrics are captured)
 
 ### 3. Technical Presentation
-Prepare to discuss the following topics:
-* **Tools & Architecture:** Explain choices for STT, TTS, and LLM, why they were selected, and how the system scales for production.
-* **Problem Solving:** Describe one technical challenge encountered and solved, plus one future optimization.
-* **Metrics & Evaluation:** Explain how to measure performance and improve ROI (metrics to track, using data for prompt tuning, and fixing drops in containment or increased handle times).
+Provide an overview of:
+
+**a) Tools, Frameworks, and APIs**
+- Explain your architecture choices (STT, TTS, LLM).
+- Why did you select those models/tools?
+- How would this scale for production?
+
+**b) Problem Solving & Debugging**
+- Describe one technical challenge you encountered while building and how you solved it.
+- If you had one more week, what would you optimize?
+
+**c) Data & Metrics Evaluation**
+Explain how you would measure performance and improve ROI over time:
+1. Metrics you would track
+2. How you would use this data to improve agent logic or prompt tuning
+3. Provide an example of how you’d identify and fix a drop in containment or increase in average handle time.

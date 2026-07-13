@@ -61,7 +61,7 @@
           "I want to talk to a real person.",
           "Transfer me to a representative."
         ],
-        "answer": "I completely understand. I can schedule a callback from one of our human representatives, or I can transfer you to the next available agent. Which would you prefer?"
+        "answer": "I completely understand, and I'd be glad to help you with that right here if I can. Could you tell me a bit more about what you need, so I can try to sort it out for you first? If I'm not able to, I can schedule a callback or transfer you to a representative."
       },
       {
         "category": "Escalation and Safety",

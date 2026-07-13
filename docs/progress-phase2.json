@@ -1,11 +1,11 @@
 {
-  "project": "Observe Insurance – Voice AI Claims Support Agent",
-  "phase": "Phase 2 – Custom LLM (bring-your-own-brain via VAPI /chat/completions SSE)",
-  "last_updated_turn": 25,
+  "project": "Observe Insurance \u2013 Voice AI Claims Support Agent",
+  "phase": "Phase 2 \u2013 Custom LLM (bring-your-own-brain via VAPI /chat/completions SSE)",
+  "last_updated_turn": 32,
   "premise": "Phase 1 (VAPI-native) is tested + working and stays as the reliable demo fallback. Phase 2 swaps ONLY the brain: our server implements an OpenAI-compatible /chat/completions SSE endpoint that VAPI calls each turn. VAPI still owns telephony/STT/TTS/endpointing/barge-in. We own the agentic layer: orchestration, state, tool-calling, extraction, post-processing, CRM, memory.",
-  "status": "V1 BUILT + LIVE-GEMINI E2E PASSED + end-of-call webhook error-handling FINALIZED & verified. Deterministic safety checks PASS; offline plumbing VERIFIED; `python harness.py --live` PASSED (greet->lookup_claim->confirm_identity->gated status reveal, zero leak). Webhook now: 200-always, Airtable sync no-retry, SQLite fallback (airtable_synced flag). READY FOR USER TELEPHONY TESTING — user to place a real VAPI dashboard call next.",
+  "status": "V1 COMPLETE + VALIDATED ON A REAL VAPI TELEPHONY CALL (turn 30). Full agentic layer working end-to-end: VAPI custom-LLM -> our /chat/completions brain (Gemini 2.5 Flash via LiteLLM) -> tools (lookup_claim/confirm_identity/faq_lookup) -> identity gate -> SSE -> end-of-call webhook -> Airtable + SQLite persist -> metrics. All automated tests green (harness deterministic + harness --live + full HTTP E2E). NEXT: V2 work (top priority = streaming-with-tool-interception for latency) + polish; optionally seed more calls for richer metrics/ROI numbers.",
   "live_verified_turn26": {
-    "result": "PASS — 3 real Gemini turns; renderer-as-gate held (no claim_status before verify); status revealed same-turn as confirmation after the confirm_identity fix.",
+    "result": "PASS \u2014 3 real Gemini turns; renderer-as-gate held (no claim_status before verify); status revealed same-turn as confirmation after the confirm_identity fix.",
     "bugs_caught_by_live_run": [
       "litellm acompletion lazily imports its MCP handler -> needs orjson (not auto-installed). Would break EVERY server turn. FIX: pip install orjson + added to requirements.txt.",
       "harness live path never called store.init_db() (only app.main does, which harness doesn't import) -> 'no such table: turns'. FIX: store.init_db() at top of live_e2e."
@@ -15,13 +15,13 @@
   },
   "webhook_error_handling_turn27": {
     "decision_id": "S4-D7",
-    "context": "Iterated the end-of-call webhook error handling with the user. Two CRM error moments, two behaviors — do NOT conflate them.",
+    "context": "Iterated the end-of-call webhook error handling with the user. Two CRM error moments, two behaviors \u2014 do NOT conflate them.",
     "mid_call_crm_error": "Happens in /chat/completions (lookup_claim tool). ALREADY BUILT in app/agent/loop.py + docs/fallbacks.json: ToolError(crm_lookup_error) -> turn returns 200 SSE speaking the FIRST-tier mapped fallback ('trouble pulling up your account, confirm your number'); caller responds -> next turn re-runs lookup_claim; 2nd failure (error_counts>=2) -> REPEAT tier -> escalate to human callback + phase=escalating. NO blind retry; the re-attempt is driven by the caller's next utterance. This is exactly the behavior the user described.",
-    "end_of_call_airtable_write": "Fires AFTER the call — no customer to re-prompt. FINAL DESIGN (user chose '200 + SQLite fallback, no retry'): attempt Airtable write SYNCHRONOUSLY so we KNOW the outcome; on failure do NOT return 5xx (no blind VAPI retry) — log it, keep the record in SQLite flagged airtable_synced=0, return 200. Airtable success -> airtable_synced=1. Response body: {status:logged, phase, airtable_synced:bool}.",
+    "end_of_call_airtable_write": "Fires AFTER the call \u2014 no customer to re-prompt. FINAL DESIGN (user chose '200 + SQLite fallback, no retry'): attempt Airtable write SYNCHRONOUSLY so we KNOW the outcome; on failure do NOT return 5xx (no blind VAPI retry) \u2014 log it, keep the record in SQLite flagged airtable_synced=0, return 200. Airtable success -> airtable_synced=1. Response body: {status:logged, phase, airtable_synced:bool}.",
     "why_not_5xx": "A blind VAPI retry re-hits our endpoint without telling anyone anything and risks duplicate writes. User: 'we dont want retry without telling customer anything.' At end-of-call there IS no customer, so the fallback is durable local persistence + a V2 reconciliation job, not a retry.",
     "reliability_tiers": "Airtable Interactions = CRM source of truth (sync, outcome known, surfaced via airtable_synced). SQLite = durable local copy / fallback (best-effort; its own failure is tolerable and never surfaced -> still 200). 'sqlite is fine' per user.",
-    "schema_change": "Added calls.airtable_synced INTEGER (store.py CREATE TABLE). Reconciliation query: SELECT * FROM calls WHERE airtable_synced=0. NOTE: CREATE TABLE IF NOT EXISTS won't add the column to a pre-existing DB — the dev DB is ephemeral/gitignored so recreate it; a real migration (ALTER TABLE) is V2.",
-    "tradeoff_accepted": "Webhook is now SYNCHRONOUS (post-processing LLM + Airtable write before the 200) — no longer the 'fast async ack' of the original requirement #5. Necessary to know the Airtable outcome. Safe: VAPI webhook timeout ~20s vs our ~2-4s.",
+    "schema_change": "Added calls.airtable_synced INTEGER (store.py CREATE TABLE). Reconciliation query: SELECT * FROM calls WHERE airtable_synced=0. NOTE: CREATE TABLE IF NOT EXISTS won't add the column to a pre-existing DB \u2014 the dev DB is ephemeral/gitignored so recreate it; a real migration (ALTER TABLE) is V2.",
+    "tradeoff_accepted": "Webhook is now SYNCHRONOUS (post-processing LLM + Airtable write before the 200) \u2014 no longer the 'fast async ack' of the original requirement #5. Necessary to know the Airtable outcome. Safe: VAPI webhook timeout ~20s vs our ~2-4s.",
     "verified": "Offline TestClient run: airtable success->200 synced=1; airtable fail->200 NO retry, SQLite row kept synced=0 & findable; sqlite fail->still 200; method/auth/event-filter all pass. harness.py deterministic safety checks still PASS (loop/gate untouched). BackgroundTasks/502 approach from an earlier iteration was REVERTED.",
     "not_built_v2": "Reconciliation job that re-pushes airtable_synced=0 rows to Airtable."
   },
@@ -31,16 +31,30 @@
     "authorization_format_CONFIRMED": "Via user pdb inspection of the live request: for the custom LLM, VAPI sends the secret RAW in Authorization (just the token, NO 'Bearer ' prefix). Initial fix assumed 'Bearer <secret>' and stripped 7 chars -> still 401. CORRECTED: auth_token = strip 'Bearer ' IF present else use Authorization raw; accept VAPI_SECRET from x_vapi_secret OR auth_token.",
     "fix": "app/api/dependencies.py verify_vapi_secret accepts VAPI_SECRET from X-Vapi-Secret OR Authorization (raw OR Bearer-prefixed). Empty-secret guarded. Improved rejection log: presence of each header + bearer_prefixed flag (never logs the secret). Verified via TestClient: raw-token->200, Bearer->200, X-Vapi-Secret->200, wrong/missing->401.",
     "user_config_needed": "In VAPI dashboard, set the Custom LLM credential's key/secret to VAPI_SECRET. VAPI forwards it in Authorization (raw). Webhook still uses X-Vapi-Secret = server.secret = same VAPI_SECRET.",
-    "RESOLUTION_query_param": "Confirmed via masked fingerprint log that VAPI does NOT forward our secret to a custom LLM — it sends a fixed placeholder Bearer token (fingerprint 'no-…ded(len26)', i.e. no-custom-llm-key-...), NOT settable. FINAL FIX (user chose query-param bypass): Custom LLM URL = {BASE}/vapi/chat/completions?secret=<VAPI_SECRET>. verify_vapi_secret now also reads a `secret` Query param (fastapi Query) and accepts VAPI_SECRET from query OR Authorization(raw/Bearer) OR X-Vapi-Secret. Verified: ?secret=correct->200 (chat endpoint ran the loop end-to-end incl. real Gemini calls), ?secret=wrong->401, X-Vapi-Secret webhook->200. Debug print removed. Tradeoff noted: URL secret can appear in access logs (fine for demo). Webhook keeps X-Vapi-Secret (VAPI sends server.secret for server messages)."
+    "RESOLUTION_query_param": "Confirmed via masked fingerprint log that VAPI does NOT forward our secret to a custom LLM \u2014 it sends a fixed placeholder Bearer token (fingerprint 'no-\u2026ded(len26)', i.e. no-custom-llm-key-...), NOT settable. FINAL FIX (user chose query-param bypass): Custom LLM URL = {BASE}/vapi/chat/completions?secret=<VAPI_SECRET>. verify_vapi_secret now also reads a `secret` Query param (fastapi Query) and accepts VAPI_SECRET from query OR Authorization(raw/Bearer) OR X-Vapi-Secret. Verified: ?secret=correct->200 (chat endpoint ran the loop end-to-end incl. real Gemini calls), ?secret=wrong->401, X-Vapi-Secret webhook->200. Debug print removed. Tradeoff noted: URL secret can appear in access logs (fine for demo). Webhook keeps X-Vapi-Secret (VAPI sends server.secret for server messages)."
+  },
+  "live_vapi_call_turn30": {
+    "milestone": "USER PLACED A REAL VAPI TELEPHONY CALL \u2014 full end-to-end worked. Phase 2 V1 is validated in production-like conditions (real telephony/STT/TTS + real caller number + our custom-LLM brain).",
+    "path_exercised": "VAPI custom LLM (Authorization Bearer placeholder ignored; auth via ?secret= query param, VAPI's appended /chat/completions stripped server-side) -> /vapi/chat/completions 200 per turn -> our Gemini tool loop -> SSE -> VAPI TTS; end-of-call webhook -> phase 2 -> Airtable write + SQLite persist.",
+    "pre_flight_tests_all_green": [
+      "harness.py deterministic (identity gate, confirm flip, 2nd-denial escalation, no-record/crm-error/faq fallbacks, SSE shape)",
+      "harness.py --live (real Gemini: greet->lookup->confirm->gated reveal)",
+      "full HTTP E2E (scratchpad/verify_e2e.py): query-param auth in VAPI's exact polluted form, 3-turn SSE over HTTP, tools, gate, end-of-call phase-2 persist (calls+3 turns+8 messages), metrics -> containment 1.0, ~3100 tokens, ~$0.0012/call, tool_success 1.0, ~2.6s/turn"
+    ],
+    "known_v1_characteristics": [
+      "~2.6s/turn latency (real Gemini + resolve-then-stream). V2 TOP PRIORITY = streaming-with-tool-interception to cut it.",
+      "benign litellm warning 'coroutine VertexLLM.async_completion was never awaited' from the fire-and-forget extractor; no functional impact.",
+      "caller name/claim only resolve when VAPI sends call.customer.number (real PSTN call). Web-widget test calls have no number -> name=Unknown / no CRM match (expected)."
+    ]
   },
   "logging_improvement_turn29": {
     "problem": "Per-call log files showed only INFO trace, no errors. Root cause: PerCallFileHandler only writes when call_id_var is set, but auth rejections (the 401 on /chat/completions) are logged in the dependency BEFORE call_id is set -> went to console only, never to any file. No durable catch-all log; unhandled exceptions not guaranteed a traceback line.",
     "fix": [
-      "logging_setup.py: added log/app.log RotatingFileHandler (5MB x3) as a durable CATCH-ALL — every record from every module lands here regardless of call context, incl. pre-call-id errors + full tracebacks. Format now includes %(funcName)s so error lines say where they came from. PerCallFileHandler.emit wrapped in try/except (logging never crashes a request). uvicorn/uvicorn.error routed through our sinks (propagate=True).",
+      "logging_setup.py: added log/app.log RotatingFileHandler (5MB x3) as a durable CATCH-ALL \u2014 every record from every module lands here regardless of call context, incl. pre-call-id errors + full tracebacks. Format now includes %(funcName)s so error lines say where they came from. PerCallFileHandler.emit wrapped in try/except (logging never crashes a request). uvicorn/uvicorn.error routed through our sinks (propagate=True).",
       "main.py: global @app.exception_handler(Exception) -> logger.exception('Unhandled error on <method> <path>') + clean 500 JSON, so uncaught errors always get a traceback+context line."
     ],
     "verified": "app.log + per-call file both created and both contain the ValueError traceback; auth-style warning logged with no call_id appears in app.log but NOT in any per-call file (correct). harness deterministic PASS; app imports OK.",
-    "suggested_next": "Optionally enrich the auth-rejection warning in dependencies.py to log which credential was present (x_vapi_secret vs bearer, presence/length only — never the secret) — left to user (file was open/being edited)."
+    "suggested_next": "Optionally enrich the auth-rejection warning in dependencies.py to log which credential was present (x_vapi_secret vs bearer, presence/length only \u2014 never the secret) \u2014 left to user (file was open/being edited)."
   },
   "build_state_turn25": {
     "endpoint": "POST /vapi/chat/completions (prefix /vapi in main.py)",
@@ -50,17 +64,22 @@
       "app/services/store.py (SQLite S2/S3), app/services/postprocess.py (S4 flat structured output, SYNC litellm.completion), app/metrics.py (S4 SQL)",
       "fallbacks.json (7 scenarios x first/repeat), METRICS.md (ROI + tuning loop), harness.py (S1.7)"
     ],
-    "files_edited": ["requirements.txt (+litellm 1.92.0)", "app/main.py (init_db + chat router)", "app/api/routers/webhooks.py (S4-D5 phase-2 branch; phase-1 path preserved verbatim)", "SETUP.md (Phase 2 section)"],
+    "files_edited": [
+      "requirements.txt (+litellm 1.92.0)",
+      "app/main.py (init_db + chat router)",
+      "app/api/routers/webhooks.py (S4-D5 phase-2 branch; phase-1 path preserved verbatim)",
+      "SETUP.md (Phase 2 section)"
+    ],
     "build_verified_facts": [
       "litellm 1.92.0 installed; model id 'gemini/gemini-2.5-flash' recognized (in model_cost); token_counter works offline",
       "LiteLLM Gemini tool-calling = standard OpenAI shape (message.tool_calls[].function.name/.arguments(JSON str)/.id; results back as {role:tool,tool_call_id,content})",
       "S4 structured output = response_format={'type':'json_object','response_schema':<FLAT schema>}",
-      "DECISION CHANGE from plan: stream final answer by CHUNKING the resolved string (single generation/turn), NOT stream_options include_usage — Gemini has a known content:None bug when include_usage is on. Completion tokens via litellm.token_counter (the planned fallback becomes the primary). Prompt tokens from resp.usage on the no-tool call, token_counter fallback. Real token-streaming w/ tool interception stays V2 (user #1).",
-      "postprocess is SYNC (litellm.completion) since the end-of-call webhook is sync def — avoids event-loop juggling; matches S1.4 'inline/synchronous in webhook'",
+      "DECISION CHANGE from plan: stream final answer by CHUNKING the resolved string (single generation/turn), NOT stream_options include_usage \u2014 Gemini has a known content:None bug when include_usage is on. Completion tokens via litellm.token_counter (the planned fallback becomes the primary). Prompt tokens from resp.usage on the no-tool call, token_counter fallback. Real token-streaming w/ tool interception stays V2 (user #1).",
+      "postprocess is SYNC (litellm.completion) since the end-of-call webhook is sync def \u2014 avoids event-loop juggling; matches S1.4 'inline/synchronous in webhook'",
       "gemini-2.5-flash price web-verified: $0.30/1M in, $2.50/1M out"
     ],
     "still_pending_live_verify": [
-      "python harness.py --live (real Gemini tool-calling E2E: greet->lookup->confirm->gated status) — BLOCKED on GEMINI_API_KEY",
+      "python harness.py --live (real Gemini tool-calling E2E: greet->lookup->confirm->gated status) \u2014 BLOCKED on GEMINI_API_KEY",
       "VAPI end-of-call transcript field path (used msg.transcript || msg.artifact.transcript defensively; confirm on a real report)",
       "real VAPI dashboard call end-to-end"
     ]
@@ -72,20 +91,53 @@
     "rule": "Every V2 idea gets parked in this schema (per-field / per-feature version tag) so nothing is lost; we decide V2 details later but discuss now."
   },
   "cross_cutting_decisions": [
-    {"id": "P2-D1", "decision": "LLM brain = Gemini 2.5 Flash", "why": "Latency for voice, cheap, google-generativeai installed", "todo": "STRICT: web-verify exact model ID + SSE/tool-calling API at build time, do not assume"},
-    {"id": "P2-D2", "decision": "Memory scope = cross-call memory", "why": "Recognize returning callers + recall prior interactions; strongest demo. Source = Airtable Interactions history keyed by caller"},
-    {"id": "P2-D3", "decision": "Post-processing = our own LLM at call end (summary+sentiment+extraction), replaces VAPI analysisPlan", "why": "Showcases the agentic layer; full control"},
-    {"id": "P2-D4", "decision": "S4 metrics = writeup + implemented compute (from logs/transcripts)", "why": "Panel narrative AND working metrics"},
-    {"id": "P2-D5", "decision": "ONE SQLite DB (stdlib sqlite3, data/conversations.db) is the shared substrate for S2 (calls, messages), S3 (turns trace) and S4 (metrics-as-SQL). No new dependency.", "why": "Queryable, cross-call memory + trace + metrics from one place; ponytail single-file/per-op-connection/WAL, single-worker ceiling"},
-    {"id": "P2-D6", "decision": "Cross-call memory READ-side is V1 (recognition tier pre-verification, recall tier gated behind identity_verified). claim_status never enters memory.", "why": "Delivers P2-D2 headline demo in V1 while preserving the identity invariant"},
-    {"id": "P2-D7", "decision": "Metrics compute is V1 (app/metrics.py, pure SQL over the shared SQLite DB). Containment uses code-derived escalated, never the LLM.", "why": "Substrate already exists (S2/S3); real numbers for the panel ROI story at near-zero build cost"}
+    {
+      "id": "P2-D1",
+      "decision": "LLM brain = Gemini 2.5 Flash",
+      "why": "Latency for voice, cheap, google-generativeai installed",
+      "todo": "STRICT: web-verify exact model ID + SSE/tool-calling API at build time, do not assume"
+    },
+    {
+      "id": "P2-D2",
+      "decision": "Memory scope = cross-call memory",
+      "why": "Recognize returning callers + recall prior interactions; strongest demo. Source = Airtable Interactions history keyed by caller"
+    },
+    {
+      "id": "P2-D3",
+      "decision": "Post-processing = our own LLM at call end (summary+sentiment+extraction), replaces VAPI analysisPlan",
+      "why": "Showcases the agentic layer; full control"
+    },
+    {
+      "id": "P2-D4",
+      "decision": "S4 metrics = writeup + implemented compute (from logs/transcripts)",
+      "why": "Panel narrative AND working metrics"
+    },
+    {
+      "id": "P2-D5",
+      "decision": "ONE SQLite DB (stdlib sqlite3, data/conversations.db) is the shared substrate for S2 (calls, messages), S3 (turns trace) and S4 (metrics-as-SQL). No new dependency.",
+      "why": "Queryable, cross-call memory + trace + metrics from one place; ponytail single-file/per-op-connection/WAL, single-worker ceiling"
+    },
+    {
+      "id": "P2-D6",
+      "decision": "Cross-call memory READ-side is V1 (recognition tier pre-verification, recall tier gated behind identity_verified). claim_status never enters memory.",
+      "why": "Delivers P2-D2 headline demo in V1 while preserving the identity invariant"
+    },
+    {
+      "id": "P2-D7",
+      "decision": "Metrics compute is V1 (app/metrics.py, pure SQL over the shared SQLite DB). Containment uses code-derived escalated, never the LLM.",
+      "why": "Substrate already exists (S2/S3); real numbers for the panel ROI story at near-zero build cost"
+    }
   ],
   "sections": {
     "S1_agent_design": {
       "title": "Agent Design & Conversation",
       "scope": "Orchestration loop, system prompt, dialogue states, conversation-flow control, context management, the agent harness, error handling + fallback responses per scenario (no-record, denied identity, alt-verification, escalation, 911 safety, off-topic).",
-      "maps_to_task": ["Capabilities 1-4", "Persona & tone", "Voice flow: greeting->auth->API->response->fallback"],
-      "status": "PLANNING COMPLETE — all 7 subsections decided; ready to build V1",
+      "maps_to_task": [
+        "Capabilities 1-4",
+        "Persona & tone",
+        "Voice flow: greeting->auth->API->response->fallback"
+      ],
+      "status": "PLANNING COMPLETE \u2014 all 7 subsections decided; ready to build V1",
       "S1_SUMMARY": {
         "architecture": "Our FastAPI server exposes POST /chat/completions (OpenAI-compatible) that VAPI calls each turn; inside we call Gemini 2.5 Flash via LiteLLM (no LangGraph/LangChain). We OWN the system prompt (strip VAPI's, inject ours). VAPI keeps telephony/STT/TTS/barge-in and only consumes our streamed SSE. Reuse Phase 1 /webhooks/vapi/end-of-call for call-end persist + post-processing.",
         "two_agents": "Responder (streams reply) + parallel extractor (asyncio task, updates current_intent for next turn, lag-by-one accepted).",
@@ -111,37 +163,108 @@
         ]
       },
       "decisions": [
-        {"id": "S1-D1", "decision": "Framework = LiteLLM only (NO LangGraph/LangChain). Our server is OpenAI-compatible outward (to VAPI); LiteLLM client inward (to Gemini)", "todo": "STRICT: web-verify LiteLLM Gemini streaming + tool-calling API at build"},
-        {"id": "S1-D2", "decision": "Two agents: main responder (streams the reply) + parallel extraction agent (maintains live ConversationState)", "why": "Extraction off the token-streaming path; state stays fresh without blocking latency"},
-        {"id": "S1-D3", "decision": "State = Pydantic ConversationState, updated live by extractor; persisted to DB at call end (handled in S2/S4)"},
-        {"id": "S1-D4", "decision": "Prompt architecture = 3 layers: static system prompt + dynamic state/memory-derived context block + turn history"},
-        {"id": "S1-D5", "decision": "Non-linear flow: phases greeting/auth -> handling{status|faq|support|escalation} -> end; caller can jump intents. State+gates keep correctness, NOT a rigid FSM"},
-        {"id": "S1-D6", "decision": "Fallback + error handling externalized to a JSON doc (scenario -> behavior/response)"},
-        {"id": "S1-D7", "decision": "FAQ knowledge base as JSON, served via tool calling"},
-        {"id": "S1-D8", "decision": "Extractor IS in V1 but minimal: extracts current_intent only. Richer soft state (topics/pending/unresolved/escalation_reason) = V2", "why": "Keeps V1 thin while still exercising the two-agent architecture"},
-        {"id": "S1-D9", "decision": "FAQ V1 = tool calling with constrained query_type key (from user-provided faq.json); available keys listed in system prompt; LLM decides whether to call + which key. V2 = RAG/semantic retrieval", "todo": "USER to provide faq.json"},
-        {"id": "S1-D10", "decision": "Our server OWNS the system prompt (Decision 1). VERIFIED feasible: VAPI custom-LLM is OpenAI-compatible; VAPI only consumes our streamed SSE, so we strip its incoming system message and inject our own static+dynamic prompt before the Gemini call. Config: dashboard Model->Custom LLM->URL={BASE}/chat/completions, auth header; VAPI assistant system-prompt field left as ignored placeholder. Build: filter incoming role:system defensively, don't assume messages[0]", "sources": ["docs.vapi.ai/customization/custom-llm/using-your-server", "docs.vapi.ai/customization/tool-calling-integration", "Phase1 verified_facts"]},
-        {"id": "S1-D11", "decision": "S1.2 context = 3 layers merged into ONE system message per turn: [static system prompt] + [dynamic state block], followed by the VAPI-resent user/assistant turns", "why": "Single system message avoids provider ambiguity on multiple system messages"},
-        {"id": "S1-D12", "decision": "S1.2 RENDERER-AS-GATE: state stores full customer incl. claim_status, but the dynamic-block renderer only exposes claim_status into context once identity_verified=true. Before that, name-only. The model literally cannot leak what isn't in its context", "why": "Strongest identity gate; deterministic, prompt-independent"},
-        {"id": "S1-D13", "decision": "Sync/async model: async FastAPI (async def /chat/completions), ONE concurrent asyncio task (the extractor), everything the caller waits on stays sequential (responder tool loop; S4 post-processing inline in webhook). Blocking requests/sqlite accepted in the async handler at single-caller demo scale (ponytail); to_thread is V2. Use litellm.acompletion.", "why": "Concurrency only where it pays (extractor off the streaming path); avoids premature to_thread plumbing for a single-caller demo. See S1.4.sync_async"}
+        {
+          "id": "S1-D1",
+          "decision": "Framework = LiteLLM only (NO LangGraph/LangChain). Our server is OpenAI-compatible outward (to VAPI); LiteLLM client inward (to Gemini)",
+          "todo": "STRICT: web-verify LiteLLM Gemini streaming + tool-calling API at build"
+        },
+        {
+          "id": "S1-D2",
+          "decision": "Two agents: main responder (streams the reply) + parallel extraction agent (maintains live ConversationState)",
+          "why": "Extraction off the token-streaming path; state stays fresh without blocking latency"
+        },
+        {
+          "id": "S1-D3",
+          "decision": "State = Pydantic ConversationState, updated live by extractor; persisted to DB at call end (handled in S2/S4)"
+        },
+        {
+          "id": "S1-D4",
+          "decision": "Prompt architecture = 3 layers: static system prompt + dynamic state/memory-derived context block + turn history"
+        },
+        {
+          "id": "S1-D5",
+          "decision": "Non-linear flow: phases greeting/auth -> handling{status|faq|support|escalation} -> end; caller can jump intents. State+gates keep correctness, NOT a rigid FSM"
+        },
+        {
+          "id": "S1-D6",
+          "decision": "Fallback + error handling externalized to a JSON doc (scenario -> behavior/response)"
+        },
+        {
+          "id": "S1-D7",
+          "decision": "FAQ knowledge base as JSON, served via tool calling"
+        },
+        {
+          "id": "S1-D8",
+          "decision": "Extractor IS in V1 but minimal: extracts current_intent only. Richer soft state (topics/pending/unresolved/escalation_reason) = V2",
+          "why": "Keeps V1 thin while still exercising the two-agent architecture"
+        },
+        {
+          "id": "S1-D9",
+          "decision": "FAQ V1 = tool calling with constrained query_type key (from user-provided faq.json); available keys listed in system prompt; LLM decides whether to call + which key. V2 = RAG/semantic retrieval",
+          "todo": "USER to provide faq.json"
+        },
+        {
+          "id": "S1-D10",
+          "decision": "Our server OWNS the system prompt (Decision 1). VERIFIED feasible: VAPI custom-LLM is OpenAI-compatible; VAPI only consumes our streamed SSE, so we strip its incoming system message and inject our own static+dynamic prompt before the Gemini call. Config: dashboard Model->Custom LLM->URL={BASE}/chat/completions, auth header; VAPI assistant system-prompt field left as ignored placeholder. Build: filter incoming role:system defensively, don't assume messages[0]",
+          "sources": [
+            "docs.vapi.ai/customization/custom-llm/using-your-server",
+            "docs.vapi.ai/customization/tool-calling-integration",
+            "Phase1 verified_facts"
+          ]
+        },
+        {
+          "id": "S1-D11",
+          "decision": "S1.2 context = 3 layers merged into ONE system message per turn: [static system prompt] + [dynamic state block], followed by the VAPI-resent user/assistant turns",
+          "why": "Single system message avoids provider ambiguity on multiple system messages"
+        },
+        {
+          "id": "S1-D12",
+          "decision": "S1.2 RENDERER-AS-GATE: state stores full customer incl. claim_status, but the dynamic-block renderer only exposes claim_status into context once identity_verified=true. Before that, name-only. The model literally cannot leak what isn't in its context",
+          "why": "Strongest identity gate; deterministic, prompt-independent"
+        },
+        {
+          "id": "S1-D13",
+          "decision": "Sync/async model: async FastAPI (async def /chat/completions), ONE concurrent asyncio task (the extractor), everything the caller waits on stays sequential (responder tool loop; S4 post-processing inline in webhook). Blocking requests/sqlite accepted in the async handler at single-caller demo scale (ponytail); to_thread is V2. Use litellm.acompletion.",
+          "why": "Concurrency only where it pays (extractor off the streaming path); avoids premature to_thread plumbing for a single-caller demo. See S1.4.sync_async"
+        }
       ],
-      "S1.2_context_engineering": {"status": "DECIDED", "note": "3 layers merged into one system message; renderer-as-gate withholds claim_status until verified; extractor has its own minimal prompt (current_intent only)"},
-      "S1.3_flow_gates": {"status": "DECIDED", "note": "Two orthogonal axes: phase (code-derived, auth progress) vs current_intent (extractor, soft). Non-linear handling falls out. Gated: claim data (needs identity_verified). Open in any phase: FAQ/general help/safety. Identity flip via confirm_identity(confirmed:bool) tool -> code flips -> renderer exposes claim_status next turn. V1 deny/no-record = single re-ask then 'human will follow up' + log; alt-verification (name+claim_id) + verification_attempts = V2"},
+      "S1.2_context_engineering": {
+        "status": "DECIDED",
+        "note": "3 layers merged into one system message; renderer-as-gate withholds claim_status until verified; extractor has its own minimal prompt (current_intent only)"
+      },
+      "S1.3_flow_gates": {
+        "status": "DECIDED",
+        "note": "Two orthogonal axes: phase (code-derived, auth progress) vs current_intent (extractor, soft). Non-linear handling falls out. Gated: claim data (needs identity_verified). Open in any phase: FAQ/general help/safety. Identity flip via confirm_identity(confirmed:bool) tool -> code flips -> renderer exposes claim_status next turn. V1 deny/no-record = single re-ask then 'human will follow up' + log; alt-verification (name+claim_id) + verification_attempts = V2"
+      },
       "S1.4_orchestration": {
         "status": "DECIDED",
-        "entry_points": {"per_turn": "POST /chat/completions (new brain)", "call_end": "POST /webhooks/vapi/end-of-call (REUSE Phase 1) -> persist transcript (S2) + run post-processing summary/sentiment (S4) from VAPI-provided transcript"},
+        "entry_points": {
+          "per_turn": "POST /chat/completions (new brain)",
+          "call_end": "POST /webhooks/vapi/end-of-call (REUSE Phase 1) -> persist transcript (S2) + run post-processing summary/sentiment (S4) from VAPI-provided transcript"
+        },
         "state_store_v1": "In-memory dict keyed by call.id, each value a Pydantic ConversationState. Single-worker ceiling (ponytail). Chosen over stateless-reconstruct because cross-turn tool-result resending by VAPI is undocumented/quirky.",
         "state_store_v2": "Redis/SQLite for multi-worker; revisit stateless-reconstruct.",
         "per_turn_flow": "extract call.id+customer.number -> get/create state -> build messages (strip VAPI system, prepend our static+dynamic block, keep turns) -> responder tool loop (lookup_claim/confirm_identity/faq_lookup) -> stream final SSE -> fire extractor in parallel (asyncio task) updating current_intent for next turn (lag-by-one accepted)",
         "tool_streaming_v1": "resolve-then-stream: resolve tool calls with non-streamed model calls, then stream the final answer. Simple; small latency only when a tool fires.",
         "sync_async": {
           "model": "Async event loop, ONE concurrent background task, everything the caller directly waits on stays sequential.",
-          "async": ["/chat/completions handler = async def (must be, to fire the extractor task + stream SSE)", "extractor = asyncio task, fire-and-forget, updates current_intent for the NEXT turn (lag-by-one)", "turn-trace SQLite write deferred until after SSE stream closes (off latency path)"],
-          "sync": ["responder tool loop within a turn = sequential (resolve-then-stream; caller is waiting, nothing to parallelize; parallelizing = V2_TOP_PRIORITY)", "S4 post-processing = inline/synchronous in end-of-call webhook (this is what lets us drop Phase 1 GET /call/{id} polling)"],
+          "async": [
+            "/chat/completions handler = async def (must be, to fire the extractor task + stream SSE)",
+            "extractor = asyncio task, fire-and-forget, updates current_intent for the NEXT turn (lag-by-one)",
+            "turn-trace SQLite write deferred until after SSE stream closes (off latency path)"
+          ],
+          "sync": [
+            "responder tool loop within a turn = sequential (resolve-then-stream; caller is waiting, nothing to parallelize; parallelizing = V2_TOP_PRIORITY)",
+            "S4 post-processing = inline/synchronous in end-of-call webhook (this is what lets us drop Phase 1 GET /call/{id} polling)"
+          ],
           "blocking_call_gotcha": "crm.py uses blocking `requests`; sqlite3 is blocking. In an async handler these block the event loop. V1 DECISION: `# ponytail: blocking requests/sqlite in async handler; fine at single-caller demo scale`. Wrap in asyncio.to_thread ONLY if/when concurrency matters (V2). LiteLLM: use acompletion in the async handler."
         },
         "V2_TOP_PRIORITY": "Tool-calling + streaming optimization (stream-with-tool-interception, lower latency). User flagged this as the MOST IMPORTANT V2 work.",
-        "evidence": ["VAPI resends conversation history each turn (confirmed)", "within-turn tool execution is ours", "cross-turn tool-result persistence undocumented -> use own store"]
+        "evidence": [
+          "VAPI resends conversation history each turn (confirmed)",
+          "within-turn tool execution is ours",
+          "cross-turn tool-result persistence undocumented -> use own store"
+        ]
       },
       "S1.5_tools_faq": {
         "status": "DECIDED",
@@ -158,37 +281,91 @@
         "status": "DECIDED",
         "approach": "Externalize to fallbacks.json (key -> {first, repeat} tiers). Handler tracks state.error_counts[key]; 1st hit -> first tier (retry/standard), 2nd hit of SAME error -> repeat tier (escalate to human/offer_callback, warmer+humbler+gentle-sales tone). Returned as a normal assistant SSE message, never a raw 500.",
         "tier_structure": "each key = {first:{response,action}, repeat:{response,action}}",
-        "v1_scenarios": ["crm_lookup_error(offer_callback)", "api_failure(human_followup)", "timeout(offer_callback)", "llm_error(human_followup)", "no_record(human_followup)", "identity_denied(human_followup)", "malformed_request(safe_ack)"],
-        "repeat_tone": "friendly, humble, apologetic, gentle-sales: e.g. 'I'm so sorry for the hold-up — rather than keep you waiting I'll have one of our representatives call you back personally. We really appreciate your patience.'",
+        "v1_scenarios": [
+          "crm_lookup_error(offer_callback)",
+          "api_failure(human_followup)",
+          "timeout(offer_callback)",
+          "llm_error(human_followup)",
+          "no_record(human_followup)",
+          "identity_denied(human_followup)",
+          "malformed_request(safe_ack)"
+        ],
+        "repeat_tone": "friendly, humble, apologetic, gentle-sales: e.g. 'I'm so sorry for the hold-up \u2014 rather than keep you waiting I'll have one of our representatives call you back personally. We really appreciate your patience.'",
         "taxonomy": "crm_lookup_error=Airtable-specific; api_failure=model/transport-level; timeout=time budget; llm_error=bad content",
         "v2": "alt-verification branch, retry-with-backoff, verification_attempts exhaustion, configurable threshold (>2), per-error escalation reasons"
       },
       "subsections": {
-        "S1.1": "State design — Pydantic ConversationState (fields, ownership: code-set vs extractor-set)",
-        "S1.2": "Context engineering — 3-layer prompts (system / dynamic state+memory / turn) + how dynamic block is assembled",
-        "S1.3": "Flow & gates — phases, non-linear intent routing, identity gate before claim reveal",
-        "S1.4": "Orchestration — LiteLLM loop: responder + parallel extractor, streaming, tool loop",
-        "S1.5": "Tools & FAQ KB — lookup_claim (reuse crm), faq.json lookup, escalation/transfer",
-        "S1.6": "Fallback & error handling — the JSON map (scenario -> response/behavior, error tiers)",
-        "S1.7": "Harness/testing — local simulation of VAPI /chat/completions to test the flow"
+        "S1.1": "State design \u2014 Pydantic ConversationState (fields, ownership: code-set vs extractor-set)",
+        "S1.2": "Context engineering \u2014 3-layer prompts (system / dynamic state+memory / turn) + how dynamic block is assembled",
+        "S1.3": "Flow & gates \u2014 phases, non-linear intent routing, identity gate before claim reveal",
+        "S1.4": "Orchestration \u2014 LiteLLM loop: responder + parallel extractor, streaming, tool loop",
+        "S1.5": "Tools & FAQ KB \u2014 lookup_claim (reuse crm), faq.json lookup, escalation/transfer",
+        "S1.6": "Fallback & error handling \u2014 the JSON map (scenario -> response/behavior, error tiers)",
+        "S1.7": "Harness/testing \u2014 local simulation of VAPI /chat/completions to test the flow"
       },
       "S1.1_state_design": {
         "status": "DECIDED",
         "ownership": "identity_verified + phase are code-owned (deterministic, zero-lag, protect the gate); soft fields are extractor-owned (lag-tolerant)",
         "schema_fields": {
-          "call_id": {"owner": "code", "version": "V1"},
-          "phase": {"owner": "code-derived", "version": "V1", "note": "greeting->authenticating->confirming_id->handling->escalating->ending"},
-          "caller_phone": {"owner": "code", "version": "V1"},
-          "identity_verified": {"owner": "code", "version": "V1", "note": "flipped on caller confirmation; gates claim reveal"},
-          "customer": {"owner": "code", "version": "V1", "note": "name/claim_id/claim_status from lookup_claim result"},
-          "turn_count": {"owner": "code", "version": "V1"},
-          "error_counts": {"owner": "code", "version": "V1", "note": "dict[error_type -> count]; drives 2-tier fallback: 1st hit retry/standard, 2nd hit of SAME error -> escalate to human/callback with warmer message"},
-          "current_intent": {"owner": "extractor", "version": "V1", "note": "MINIMAL V1 extractor field — feeds FAQ routing + which query_type to call; extractor runs but only this in V1"},
-          "topics_discussed": {"owner": "extractor", "version": "V2"},
-          "pending_action": {"owner": "extractor", "version": "V2"},
-          "unresolved": {"owner": "extractor", "version": "V2"},
-          "verification_attempts": {"owner": "code", "version": "V2", "note": "added per user; drives alt-verification fallback"},
-          "escalation_reason": {"owner": "extractor/code", "version": "V2", "note": "added per user"}
+          "call_id": {
+            "owner": "code",
+            "version": "V1"
+          },
+          "phase": {
+            "owner": "code-derived",
+            "version": "V1",
+            "note": "greeting->authenticating->confirming_id->handling->escalating->ending"
+          },
+          "caller_phone": {
+            "owner": "code",
+            "version": "V1"
+          },
+          "identity_verified": {
+            "owner": "code",
+            "version": "V1",
+            "note": "flipped on caller confirmation; gates claim reveal"
+          },
+          "customer": {
+            "owner": "code",
+            "version": "V1",
+            "note": "name/claim_id/claim_status from lookup_claim result"
+          },
+          "turn_count": {
+            "owner": "code",
+            "version": "V1"
+          },
+          "error_counts": {
+            "owner": "code",
+            "version": "V1",
+            "note": "dict[error_type -> count]; drives 2-tier fallback: 1st hit retry/standard, 2nd hit of SAME error -> escalate to human/callback with warmer message"
+          },
+          "current_intent": {
+            "owner": "extractor",
+            "version": "V1",
+            "note": "MINIMAL V1 extractor field \u2014 feeds FAQ routing + which query_type to call; extractor runs but only this in V1"
+          },
+          "topics_discussed": {
+            "owner": "extractor",
+            "version": "V2"
+          },
+          "pending_action": {
+            "owner": "extractor",
+            "version": "V2"
+          },
+          "unresolved": {
+            "owner": "extractor",
+            "version": "V2"
+          },
+          "verification_attempts": {
+            "owner": "code",
+            "version": "V2",
+            "note": "added per user; drives alt-verification fallback"
+          },
+          "escalation_reason": {
+            "owner": "extractor/code",
+            "version": "V2",
+            "note": "added per user"
+          }
         }
       },
       "v1_scope": "Responder agent + minimal parallel extractor (current_intent only) + deterministic state + identity gate. FAQ via tool calling with query_type keys (keys in system prompt). Safety/911/escalation scripted in system prompt.",
@@ -200,35 +377,65 @@
       },
       "faqs_json_received": true,
       "open_questions": [],
-      "next_steps": ["User choice: plan S2-S4 first, or start building S1 V1 now"]
+      "next_steps": [
+        "User choice: plan S2-S4 first, or start building S1 V1 now"
+      ]
     },
     "S2_crm_memory": {
       "title": "CRM Integration (Airtable) & Memory",
       "scope": "Airtable read (lookup_by_phone) + write (interactions), storing the conversation, memory management (in-turn state, persistent transcript, cross-call memory).",
-      "maps_to_task": ["Integration 1: retrieval by phone", "Integration 2: write-back record"],
-      "status": "PLANNING COMPLETE — deep-planned; ready to build V1 (after S1 orchestration loop exists)",
+      "maps_to_task": [
+        "Integration 1: retrieval by phone",
+        "Integration 2: write-back record"
+      ],
+      "status": "PLANNING COMPLETE \u2014 deep-planned; ready to build V1 (after S1 orchestration loop exists)",
       "reuse": "crm.py lookup_by_phone/write_interaction reused verbatim from Phase 1.",
       "S2_SUMMARY": {
         "store": "ONE SQLite DB (stdlib sqlite3, no new dep) at data/conversations.db serves BOTH S2 (calls+messages) and S3 (turns). Chosen over JSONL/Airtable-table for queryability, cross-call-memory reads, and S4-metrics-as-SQL.",
         "store_division": "Airtable Interactions = business/CRM record (name, summary, sentiment, timestamp), reused verbatim, panel-visible. SQLite = transcript + per-turn trace + cross-call-memory substrate. Both written at call end; turns written per-turn during the call (S3).",
         "transcript": "Belt-and-suspenders: (a) vapi_transcript string on the calls row = authoritative spoken record from VAPI end-of-call-report; (b) messages rows = our structured history (roles + tool calls) = what the model actually processed.",
         "memory_v1": "Cross-call memory READ-SIDE pulled into V1 (user decision). At call start, recent_calls_by_phone(digits) queries SQLite; a memory block is injected into the S1.2 dynamic-context renderer.",
-        "memory_gate": "Memory block is TWO-TIER, mirroring the identity gate. Recognition tier (name + prior-call count + last-call date) available pre-verification. Recall tier (prior-call summaries) exposed ONLY after identity_verified=true. NEVER claim_status. Renderer-as-gate [[S1-D12]] governs both claim_status and memory recall — prevents a phone-spoofed caller from hearing prior claim details.",
+        "memory_gate": "Memory block is TWO-TIER, mirroring the identity gate. Recognition tier (name + prior-call count + last-call date) available pre-verification. Recall tier (prior-call summaries) exposed ONLY after identity_verified=true. NEVER claim_status. Renderer-as-gate [[S1-D12]] governs both claim_status and memory recall \u2014 prevents a phone-spoofed caller from hearing prior claim details.",
         "persist_path": "Extend /webhooks/vapi/end-of-call (Phase 1 route, prefix /webhooks): read in-memory ConversationState by call.id -> run S4 summary/sentiment -> write Airtable Interaction (reused) -> write SQLite calls + messages rows."
       },
       "decisions": [
-        {"id": "S2-D1", "decision": "Unified SQLite DB at data/conversations.db (stdlib sqlite3, WAL mode, short-lived per-operation connection like the per-line log handler). Serves S2 (calls, messages) AND S3 (turns) AND S4 (metrics-as-SQL).", "why": "Queryable, zero new dependency, one substrate for transcript+memory+trace+metrics", "ceiling": "ponytail: single DB file + per-op connection, single-worker. Move to pooled connection / Postgres if concurrency grows."},
-        {"id": "S2-D2", "decision": "Two stores with distinct purposes, both written at call end: Airtable Interactions = CRM-visible business record (reused verbatim); SQLite = engineering transcript + trace + memory substrate.", "why": "Don't overload Airtable with engineering data; don't lose the panel-visible CRM write"},
-        {"id": "S2-D3", "decision": "Persist transcript two ways: vapi_transcript (spoken record, from end-of-call-report) on calls row + structured messages rows (what the model processed, incl. tool calls).", "todo": "STRICT: web-verify VAPI end-of-call-report transcript field path at build (artifact.transcript vs message.transcript vs artifact.messages)"},
-        {"id": "S2-D4", "decision": "Cross-call memory READ-side is V1 (pulled forward per user). recent_calls_by_phone(digits, limit) at call start -> memory block into S1.2 renderer.", "why": "P2-D2 headline demo (recognize returning callers) delivered in V1"},
-        {"id": "S2-D5", "decision": "Memory block is two-tier and gated: recognition (name+count+date) pre-verification; recall (prior summaries) only after identity_verified=true; claim_status NEVER in memory.", "why": "Preserves the identity invariant against phone spoofing; consistent with lookup_claim name-only [[S1-D12]]"},
-        {"id": "S2-D6", "decision": "Persist entry point = extend Phase 1 /webhooks/vapi/end-of-call (reads in-memory state by call.id).", "why": "Reuse; state still resident on same worker at call end (ponytail single-worker ceiling)"}
+        {
+          "id": "S2-D1",
+          "decision": "Unified SQLite DB at data/conversations.db (stdlib sqlite3, WAL mode, short-lived per-operation connection like the per-line log handler). Serves S2 (calls, messages) AND S3 (turns) AND S4 (metrics-as-SQL).",
+          "why": "Queryable, zero new dependency, one substrate for transcript+memory+trace+metrics",
+          "ceiling": "ponytail: single DB file + per-op connection, single-worker. Move to pooled connection / Postgres if concurrency grows."
+        },
+        {
+          "id": "S2-D2",
+          "decision": "Two stores with distinct purposes, both written at call end: Airtable Interactions = CRM-visible business record (reused verbatim); SQLite = engineering transcript + trace + memory substrate.",
+          "why": "Don't overload Airtable with engineering data; don't lose the panel-visible CRM write"
+        },
+        {
+          "id": "S2-D3",
+          "decision": "Persist transcript two ways: vapi_transcript (spoken record, from end-of-call-report) on calls row + structured messages rows (what the model processed, incl. tool calls).",
+          "todo": "STRICT: web-verify VAPI end-of-call-report transcript field path at build (artifact.transcript vs message.transcript vs artifact.messages)"
+        },
+        {
+          "id": "S2-D4",
+          "decision": "Cross-call memory READ-side is V1 (pulled forward per user). recent_calls_by_phone(digits, limit) at call start -> memory block into S1.2 renderer.",
+          "why": "P2-D2 headline demo (recognize returning callers) delivered in V1"
+        },
+        {
+          "id": "S2-D5",
+          "decision": "Memory block is two-tier and gated: recognition (name+count+date) pre-verification; recall (prior summaries) only after identity_verified=true; claim_status NEVER in memory.",
+          "why": "Preserves the identity invariant against phone spoofing; consistent with lookup_claim name-only [[S1-D12]]"
+        },
+        {
+          "id": "S2-D6",
+          "decision": "Persist entry point = extend Phase 1 /webhooks/vapi/end-of-call (reads in-memory state by call.id).",
+          "why": "Reuse; state still resident on same worker at call end (ponytail single-worker ceiling)"
+        }
       ],
       "sqlite_schema": {
         "note": "CREATE TABLE IF NOT EXISTS on startup (init_db called from main.py). caller_phone_digits = last-10 join key, stored unmasked (local DB, it IS the retrieval key; masking is a LOG concern).",
         "calls": "call_id TEXT PK, caller_phone_digits TEXT, caller_name TEXT, claim_id TEXT, identity_verified INT, current_intent TEXT, final_phase TEXT, num_turns INT, summary TEXT (S4), sentiment TEXT (S4), vapi_transcript TEXT, started_at TEXT, ended_at TEXT, duration_seconds REAL, escalated INT",
         "messages": "id INTEGER PK, call_id TEXT FK, turn_index INT, role TEXT, content TEXT, tool_name TEXT NULL, created_at TEXT",
-        "turns": "OWNED BY S3 (see S3.trace_schema) — per-turn trace rows in the same DB"
+        "turns": "OWNED BY S3 (see S3.trace_schema) \u2014 per-turn trace rows in the same DB"
       },
       "v1_build_order": [
         "1. app/services/store.py (stdlib sqlite3): init_db() + save_call() + save_messages() + save_turn() + recent_calls_by_phone(digits, limit). WAL, per-op connection.",
@@ -243,13 +450,17 @@
       "v1_scope": "Airtable read + write-back reused from Phase 1, PLUS SQLite persist (calls+messages) at call end, PLUS cross-call memory read (recognition + gated recall) injected into context.",
       "v2_scope": "Richer memory management (semantic recall across many calls, summary-of-summaries), memory decay/relevance ranking, Redis/Postgres for multi-worker, memory write-side beyond last-call summary.",
       "open_questions": [],
-      "next_steps": ["Build after S1 orchestration loop exists (S2 hooks into the per-turn context render + end-of-call webhook)"]
+      "next_steps": [
+        "Build after S1 orchestration loop exists (S2 hooks into the per-turn context render + end-of-call webhook)"
+      ]
     },
     "S3_logging_monitoring": {
       "title": "Logging, Monitoring & Tracing",
       "scope": "Monitoring/logging touchpoints where errors + metrics are captured; per-call tracing extended to the custom-LLM loop (turns, tool calls, latencies, token counts, errors).",
-      "maps_to_task": ["Deliverable: monitoring/logging touchpoints"],
-      "status": "PLANNING COMPLETE — deep-planned; ready to build V1 (alongside the S1 loop)",
+      "maps_to_task": [
+        "Deliverable: monitoring/logging touchpoints"
+      ],
+      "status": "PLANNING COMPLETE \u2014 deep-planned; ready to build V1 (alongside the S1 loop)",
       "reuse": "logging_setup.py (PerCallFileHandler + call_id_var + masked phones) reused VERBATIM; extend touchpoints across the LLM loop. No change to logging_setup.py.",
       "S3_SUMMARY": {
         "two_channels": "Human-readable INFO lines -> reused per-call log/<callId>.log (Phase 1 infra). Machine-readable per-turn trace -> SQLite turns table (same DB as S2) = the substrate S4 metrics compute reads via SQL.",
@@ -258,15 +469,61 @@
         "timing": "stdlib time.perf_counter via a small helper. NO OpenTelemetry/tracing library in V1 (ponytail)."
       },
       "decisions": [
-        {"id": "S3-D1", "decision": "Trace sink = SQLite `turns` table in the same data/conversations.db as S2. S4 metrics = SQL queries. Written per turn after streaming (off latency path).", "why": "Unifies stores; makes S4 containment/handle-time a query, not a log-parser", "sources": ["user decision this session"]},
-        {"id": "S3-D2", "decision": "Metric list LOCKED for V1 (see metrics_locked). Per-turn + per-call.", "why": "V1 scope already fixed the set; no open metric question remains"},
-        {"id": "S3-D3", "decision": "Token counts via LiteLLM usage; resolve-then-stream makes tool-resolution usage free; final stream needs stream_options include_usage; litellm.token_counter fallback.", "todo": "STRICT: web-verify Gemini 2.5 Flash + LiteLLM include_usage actually returns usage on the final stream chunk at build (known provider-specific gaps)", "sources": ["docs.litellm.ai/docs/completion/usage", "docs.litellm.ai/stream"]},
-        {"id": "S3-D4", "decision": "Timing via stdlib time.perf_counter + a tiny span helper. No tracing lib in V1.", "why": "ponytail: OTel is V2 dashboard territory, overkill for a demo"},
-        {"id": "S3-D5", "decision": "Reuse Phase 1 logging infra verbatim (PerCallFileHandler, call_id_var, mask_phone). Set call_id_var at /chat/completions entry so every LLM-loop log line lands in that call's file.", "why": "Zero new logging code; consistent per-call files across both phases"}
+        {
+          "id": "S3-D1",
+          "decision": "Trace sink = SQLite `turns` table in the same data/conversations.db as S2. S4 metrics = SQL queries. Written per turn after streaming (off latency path).",
+          "why": "Unifies stores; makes S4 containment/handle-time a query, not a log-parser",
+          "sources": [
+            "user decision this session"
+          ]
+        },
+        {
+          "id": "S3-D2",
+          "decision": "Metric list LOCKED for V1 (see metrics_locked). Per-turn + per-call.",
+          "why": "V1 scope already fixed the set; no open metric question remains"
+        },
+        {
+          "id": "S3-D3",
+          "decision": "Token counts via LiteLLM usage; resolve-then-stream makes tool-resolution usage free; final stream needs stream_options include_usage; litellm.token_counter fallback.",
+          "todo": "STRICT: web-verify Gemini 2.5 Flash + LiteLLM include_usage actually returns usage on the final stream chunk at build (known provider-specific gaps)",
+          "sources": [
+            "docs.litellm.ai/docs/completion/usage",
+            "docs.litellm.ai/stream"
+          ]
+        },
+        {
+          "id": "S3-D4",
+          "decision": "Timing via stdlib time.perf_counter + a tiny span helper. No tracing lib in V1.",
+          "why": "ponytail: OTel is V2 dashboard territory, overkill for a demo"
+        },
+        {
+          "id": "S3-D5",
+          "decision": "Reuse Phase 1 logging infra verbatim (PerCallFileHandler, call_id_var, mask_phone). Set call_id_var at /chat/completions entry so every LLM-loop log line lands in that call's file.",
+          "why": "Zero new logging code; consistent per-call files across both phases"
+        }
       ],
       "metrics_locked": {
-        "per_turn_turns_table": ["turn_latency_ms", "llm_latency_ms", "prompt_tokens", "completion_tokens", "total_tokens", "tool_calls (JSON: [{name,status,latency_ms}])", "phase_before", "phase_after", "current_intent", "identity_verified", "error_type (NULL|S1.6 taxonomy)"],
-        "per_call_derivable": ["num_turns", "total_tokens (SUM turns)", "duration_seconds", "escalated (containment substrate)", "final_phase", "sentiment (S4)"]
+        "per_turn_turns_table": [
+          "turn_latency_ms",
+          "llm_latency_ms",
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens",
+          "tool_calls (JSON: [{name,status,latency_ms}])",
+          "phase_before",
+          "phase_after",
+          "current_intent",
+          "identity_verified",
+          "error_type (NULL|S1.6 taxonomy)"
+        ],
+        "per_call_derivable": [
+          "num_turns",
+          "total_tokens (SUM turns)",
+          "duration_seconds",
+          "escalated (containment substrate)",
+          "final_phase",
+          "sentiment (S4)"
+        ]
       },
       "trace_schema": {
         "turns": "id INTEGER PK, call_id TEXT FK, turn_index INT, turn_latency_ms REAL, llm_latency_ms REAL, prompt_tokens INT, completion_tokens INT, total_tokens INT, tool_calls TEXT (JSON), phase_before TEXT, phase_after TEXT, current_intent TEXT, identity_verified INT, error_type TEXT NULL, created_at TEXT"
@@ -283,35 +540,79 @@
         "LiteLLM + Gemini 2.5 Flash: include_usage returns usage on final stream chunk (else use token_counter fallback)",
         "FastAPI StreamingResponse: run the turn-trace write after generator close / as a background task so it stays off the perceived-latency path"
       ],
-      "v1_scope": "Per-turn latency, token counts, tool-call success/fail + latency, LLM errors (S1.6 taxonomy), phase transitions, current_intent — logged to reused per-call files AND persisted to the SQLite turns table for S4.",
+      "v1_scope": "Per-turn latency, token counts, tool-call success/fail + latency, LLM errors (S1.6 taxonomy), phase transitions, current_intent \u2014 logged to reused per-call files AND persisted to the SQLite turns table for S4.",
       "v2_scope": "Aggregation/dashboards, latency percentiles, per-call cost tracking (litellm cost), OpenTelemetry spans, richer trace visualization, alerting.",
       "open_questions": [],
-      "next_steps": ["Build alongside the S1 loop: add span timing + turn-trace write inside the /chat/completions orchestration; store.save_turn() from S2"]
+      "next_steps": [
+        "Build alongside the S1 loop: add span timing + turn-trace write inside the /chat/completions orchestration; store.save_turn() from S2"
+      ]
     },
     "S4_metrics_postprocessing": {
       "title": "Data & Metrics Evaluation + Post-processing",
       "scope": "Post-call processing (our own summary + sentiment + extraction, replacing VAPI analysisPlan), and the metrics/ROI evaluation: which metrics to track and how to feed them back into prompt/logic tuning.",
-      "maps_to_task": ["Deliverable: metrics & ROI; containment, handle time, prompt tuning"],
-      "status": "PLANNING COMPLETE — deep-planned; ready to build V1 (after S1 loop + S2 store exist)",
+      "maps_to_task": [
+        "Deliverable: metrics & ROI; containment, handle time, prompt tuning"
+      ],
+      "status": "PLANNING COMPLETE \u2014 deep-planned; ready to build V1 (after S1 loop + S2 store exist)",
       "S4_SUMMARY": {
         "postprocess": "Our own LiteLLM Gemini pass runs SYNCHRONOUSLY inside the extended /webhooks/vapi/end-of-call (P2-D3). Replaces VAPI analysisPlan AND removes the Phase 1 polling problem (we own the call, no GET /call/{id} wait). ONE flat structured-output call.",
         "extraction_v1": "Flat schema: {summary:str, sentiment:enum[Positive|Neutral|Negative], resolution_status:enum[resolved|escalated|unresolved], primary_topic:str}. Flat to dodge the nested-Pydantic 400 on Gemini. Stored: summary+sentiment -> Airtable write_interaction (reused) + SQLite calls row; resolution_status+primary_topic -> SQLite calls row.",
-        "containment_source": "CODE-derived escalated (final_phase=='escalating' OR any error hit S1.6 repeat tier), NOT the LLM. LLM resolution_status is descriptive only — never trust the model for the headline metric.",
+        "containment_source": "CODE-derived escalated (final_phase=='escalating' OR any error hit S1.6 repeat tier), NOT the LLM. LLM resolution_status is descriptive only \u2014 never trust the model for the headline metric.",
         "phase_branch": "Same webhook serves both phases. If in-memory state exists for call.id -> Phase 2 -> run OUR post-processing. Else -> Phase 1 -> keep existing VAPI-analysis behavior. Preserves the Phase 1 fallback untouched.",
         "metrics_v1": "app/metrics.py = pure SQL aggregates over data/conversations.db (no pandas). Prints a report + returns a dict. Pulled into V1 (user decision) since the S2/S3 substrate already holds everything.",
         "roi": "METRICS.md maps metrics -> ROI narrative + the prompt-tuning feedback loop. Framework/skeleton now; real numbers after live calls."
       },
       "decisions": [
-        {"id": "S4-D1", "decision": "Post-processing is OUR synchronous LiteLLM Gemini call inside the end-of-call webhook (P2-D3). No VAPI analysisPlan, no GET /call/{id} polling.", "why": "We own the transcript + timing; removes the Phase 1 async-analysis timing problem noted in progress.md"},
-        {"id": "S4-D2", "decision": "ONE FLAT structured-output pass -> {summary, sentiment, resolution_status, primary_topic}. response_format json_schema + litellm.enable_json_schema_validation; prompt-and-parse fallback on failure -> S1.6 llm_error tier (sentiment->Neutral, summary from transcript tail).", "todo": "STRICT: web-verify LiteLLM + gemini-2.5-flash json_schema returns valid output; keep schema FLAT (nested Pydantic 400 caveat)", "sources": ["docs.litellm.ai/docs/completion/json_mode", "ai.google.dev/gemini-api/docs/structured-output"]},
-        {"id": "S4-D3", "decision": "Containment metric uses CODE-derived `escalated` on the calls row, not the LLM's resolution_status.", "why": "Headline ROI metric must be deterministic, not model-dependent"},
-        {"id": "S4-D4", "decision": "Metrics compute is V1 (pulled forward): app/metrics.py, pure sqlite3 SQL aggregates, no pandas.", "why": "Substrate (calls+turns) already exists from S2/S3; compute is a thin SQL script (ponytail)"},
-        {"id": "S4-D5", "decision": "Same end-of-call webhook branches on whether in-memory state exists for call.id: Phase 2 -> our post-processing; Phase 1 -> existing VAPI-analysis path.", "why": "Extend the reused webhook without breaking the Phase 1 fallback demo"},
-        {"id": "S4-D6", "decision": "ROI writeup = METRICS.md (panel deliverable): metric->ROI mapping + prompt-tuning feedback loop. Skeleton now, numbers post-call.", "why": "P2-D4 narrative for the panel"}
+        {
+          "id": "S4-D1",
+          "decision": "Post-processing is OUR synchronous LiteLLM Gemini call inside the end-of-call webhook (P2-D3). No VAPI analysisPlan, no GET /call/{id} polling.",
+          "why": "We own the transcript + timing; removes the Phase 1 async-analysis timing problem noted in progress.md"
+        },
+        {
+          "id": "S4-D2",
+          "decision": "ONE FLAT structured-output pass -> {summary, sentiment, resolution_status, primary_topic}. response_format json_schema + litellm.enable_json_schema_validation; prompt-and-parse fallback on failure -> S1.6 llm_error tier (sentiment->Neutral, summary from transcript tail).",
+          "todo": "STRICT: web-verify LiteLLM + gemini-2.5-flash json_schema returns valid output; keep schema FLAT (nested Pydantic 400 caveat)",
+          "sources": [
+            "docs.litellm.ai/docs/completion/json_mode",
+            "ai.google.dev/gemini-api/docs/structured-output"
+          ]
+        },
+        {
+          "id": "S4-D3",
+          "decision": "Containment metric uses CODE-derived `escalated` on the calls row, not the LLM's resolution_status.",
+          "why": "Headline ROI metric must be deterministic, not model-dependent"
+        },
+        {
+          "id": "S4-D4",
+          "decision": "Metrics compute is V1 (pulled forward): app/metrics.py, pure sqlite3 SQL aggregates, no pandas.",
+          "why": "Substrate (calls+turns) already exists from S2/S3; compute is a thin SQL script (ponytail)"
+        },
+        {
+          "id": "S4-D5",
+          "decision": "Same end-of-call webhook branches on whether in-memory state exists for call.id: Phase 2 -> our post-processing; Phase 1 -> existing VAPI-analysis path.",
+          "why": "Extend the reused webhook without breaking the Phase 1 fallback demo"
+        },
+        {
+          "id": "S4-D6",
+          "decision": "ROI writeup = METRICS.md (panel deliverable): metric->ROI mapping + prompt-tuning feedback loop. Skeleton now, numbers post-call.",
+          "why": "P2-D4 narrative for the panel"
+        }
       ],
       "metrics_locked": {
-        "from_calls": ["containment_rate = 1 - escalated/total", "avg_handle_time_s = AVG(duration_seconds)", "avg_turns = AVG(num_turns)", "sentiment_distribution = COUNT GROUP BY sentiment", "resolution_distribution = COUNT GROUP BY resolution_status"],
-        "from_turns": ["total_tokens = SUM(total_tokens)", "est_cost_usd = total_tokens * gemini-2.5-flash price (verify price at build)", "tool_success_rate = parse turns.tool_calls JSON, ok/total", "avg_turn_latency_ms = AVG(turn_latency_ms)", "avg_llm_latency_ms = AVG(llm_latency_ms)"]
+        "from_calls": [
+          "containment_rate = 1 - escalated/total",
+          "avg_handle_time_s = AVG(duration_seconds)",
+          "avg_turns = AVG(num_turns)",
+          "sentiment_distribution = COUNT GROUP BY sentiment",
+          "resolution_distribution = COUNT GROUP BY resolution_status"
+        ],
+        "from_turns": [
+          "total_tokens = SUM(total_tokens)",
+          "est_cost_usd = total_tokens * gemini-2.5-flash price (verify price at build)",
+          "tool_success_rate = parse turns.tool_calls JSON, ok/total",
+          "avg_turn_latency_ms = AVG(turn_latency_ms)",
+          "avg_llm_latency_ms = AVG(llm_latency_ms)"
+        ]
       },
       "prompt_tuning_loop": {
         "note": "How metrics feed back into prompt/logic tuning (the task asks for this).",
@@ -335,7 +636,9 @@
       "v1_scope": "Our synchronous post-call LLM pass -> {summary, sentiment, resolution_status, primary_topic} feeding Airtable + SQLite; PLUS app/metrics.py SQL compute; PLUS METRICS.md ROI skeleton.",
       "v2_scope": "Richer entity extraction, per-topic drill-downs, dashboards/visualization, automated prompt-tuning suggestions, cost alerting, CSAT correlation, date-range aggregation + export.",
       "open_questions": [],
-      "next_steps": ["Build after S1 loop + S2 store exist (post-processing consumes state; metrics read the SQLite tables S2/S3 populate)"]
+      "next_steps": [
+        "Build after S1 loop + S2 store exist (post-processing consumes state; metrics read the SQLite tables S2/S3 populate)"
+      ]
     }
   },
   "verified_facts": [
@@ -350,5 +653,51 @@
     "S4: post-processing (summary/sentiment/extraction) at call end",
     "S3: extend tracing across the loop (turns/latency/tokens/errors)",
     "S4: metrics compute + ROI writeup"
-  ]
+  ],
+  "session_optimizing_v1_turn31": {
+    "session": "optimizing-agent-v1",
+    "summary": "Prompt/flow fixes + fuzzy CRM matching + alternative verification. Latency approach re-scoped with primary evidence (probes).",
+    "shipped": [
+      "prompts.py: greet+ask-number FIRST, no tool call in greeting (fixes premature lookup_claim on empty VAPI caller-ID that produced 'couldn't find your number' before the caller spoke).",
+      "prompts.py + tools.py: identity confirmation now uses the assignment's exact line 'Am I speaking with {first} {last}?'.",
+      "crm.py: generic stdlib fuzzy matcher \u2014 all_customers() one-scan + match(customers, phone, name). Phone: exact last-10 digits else Levenshtein<=2 (mis-heard/dropped/extra digit). Name: fuzzy token match (edit<=1) for disambiguation + alternative verification. lookup_by_phone left untouched (Phase 1 fallback).",
+      "tools.py: lookup_claim rewritten \u2014 1 candidate->confirm; >1->ask full name (disambiguate); 0->ask full name (alt verification via state.name_attempted) then no_record fallback -> human follow-up. Added optional full_name param to schema.",
+      "state.py: added name_attempted flag.",
+      "test_fuzzy_match.py: pure self-check (edit distances, exact/fuzzy/ambiguous/name/typo). harness.py: check_fuzzy_lookup added; check_no_record/check_crm_error updated to patch all_customers and assert the new alt-verification flow.",
+      "docs/TASK.md replaced with the verbatim assignment brief (authoritative source)."
+    ],
+    "latency_evidence": {
+      "method": "throwaway probes in scratchpad against real Gemini 2.5 Flash via native google-genai SDK (installed google-genai 2.11.0 in venv; NOT yet in requirements.txt).",
+      "warm_ttft_seconds": {
+        "text_turn": 0.96,
+        "tool_round1_functioncall": 1.46,
+        "tool_round2_final_text": 0.94
+      },
+      "findings": [
+        "function_call arrives as ONE complete chunk (no arg-delta streaming) \u2014 confirms interceptor can accumulate whole.",
+        "AFC (automatic function calling) must be DISABLED and tools passed as function_declarations so we execute our own state-mutating tools.",
+        "Streaming alone is a MODEST win; the dominant cost is the number of sequential LLM round-trips (~1s TTFT floor each). Biggest lever = cut round-trips.",
+        "TOP recommended optimization: inline the 8-item KB into the system prompt and DROP faq_lookup so FAQ turns go 2 round-trips -> 1 (~1.7s saved/FAQ turn). Awaiting user's tradeoff decision (verbatim answers + tool-trace vs speed).",
+        "Then: migrate the hot path (loop.py) to native google-genai streaming + intercept-every-round (fixes LiteLLM<->Gemini tool-arg-delta bug); keep postprocess.py/extractor on litellm (off latency path)."
+      ]
+    },
+    "verified": "python harness.py green (incl. new checks); python test_fuzzy_match.py green; app imports clean.",
+    "pending": "1) user decision on inline-KB vs keep faq_lookup. 2) native-SDK streaming rewrite of loop.py (loop.py still resolve-then-chunk). 3) add google-genai to requirements.txt when the migration lands. 4) broader scenario testing on a real VAPI call."
+  },
+  "escalation_prompt_tuning_turn32": {
+    "session": "optimizing-agent-v1",
+    "summary": "Escalation & Safety (assignment cap #4) tuned PROMPT-ONLY (no new tools/state, per user).",
+    "policy_decisions": [
+      "Human handoff = deflect EXACTLY once (try to contain/help first), then honor insistence; never loop, never refuse an insisting caller.",
+      "Emergency -> immediate 911, never deflected/delayed.",
+      "Off-topic -> brief scope statement + redirect.",
+      "Human handoff no longer routed through faq_lookup \u2014 governed solely by the system-prompt ESCALATION & SAFETY section (also saves a tool round-trip)."
+    ],
+    "changes": [
+      "prompts.py STATIC_SYSTEM: replaced SAFETY block with fuller ESCALATION & SAFETY block; flow line no longer sends 'speaking to a human' to faq_lookup.",
+      "faqs.json human_representative answer softened to deflect-first (was jumping straight to callback/transfer)."
+    ],
+    "verified_live": "scratchpad/scenario_escalation.py against real Gemini: deflect-once + insist->handoff, 911, off-topic all behave correctly. harness.py still green.",
+    "known_caveat": "Prompt-only escalation does NOT set phase=ESCALATING, so a deflect->handoff is not counted in the code-derived containment metric (webhooks.py _phase2_record). Add a state hook later if escalations must appear in deliverable-#3 numbers."
+  }
 }
